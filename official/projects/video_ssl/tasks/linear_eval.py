@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Video ssl linear evaluation task definition."""
 from typing import Any, Optional, List, Tuple
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 # pylint: disable=unused-import
 from official.core import task_factory
-from official.projects.video_ssl.configs.google import video_ssl as exp_cfg
+from official.projects.video_ssl.configs import video_ssl as exp_cfg
 from official.projects.video_ssl.modeling import video_ssl_model
 from official.vision.tasks import video_classification
 
@@ -29,7 +28,7 @@ from official.vision.tasks import video_classification
 class VideoSSLEvalTask(video_classification.VideoClassificationTask):
   """A task for video ssl linear evaluation."""
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """Loading pretrained checkpoint."""
     if not self.task_config.init_checkpoint:
       return
@@ -50,8 +49,8 @@ class VideoSSLEvalTask(video_classification.VideoClassificationTask):
 
   def train_step(self,
                  inputs: Tuple[Any, Any],
-                 model: tf.keras.Model,
-                 optimizer: tf.keras.optimizers.Optimizer,
+                 model: tf_keras.Model,
+                 optimizer: tf_keras.optimizers.Optimizer,
                  metrics: Optional[List[Any]] = None):
     """Does forward and backward.
 
@@ -67,5 +66,4 @@ class VideoSSLEvalTask(video_classification.VideoClassificationTask):
     model.backbone.trainable = False
     logging.info('Setting the backbone to non-trainable.')
 
-    return super(video_classification.VideoClassificationTask,
-                 self).train_step(inputs, model, optimizer, metrics)
+    return super().train_step(inputs, model, optimizer, metrics)

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Training driver."""
 
 from absl import app
@@ -28,7 +27,7 @@ from official.core import train_utils
 from official.modeling import performance
 from official.projects.video_ssl.modeling import video_ssl_model
 from official.projects.video_ssl.tasks import linear_eval
-from official.projects.video_ssl.tasks.google import pretrain
+from official.projects.video_ssl.tasks import pretrain
 from official.vision import registry_imports
 # pylint: disable=unused-import
 

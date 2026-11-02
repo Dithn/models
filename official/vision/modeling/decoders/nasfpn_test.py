@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for NAS-FPN."""
 
-# Import libraries
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.modeling.backbones import resnet
 from official.vision.modeling.decoders import nasfpn
@@ -32,9 +30,9 @@ class NASFPNTest(parameterized.TestCase, tf.test.TestCase):
   def test_network_creation(self, input_size, min_level, max_level,
                             use_separable_conv):
     """Test creation of NAS-FPN."""
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
 
-    inputs = tf.keras.Input(shape=(input_size, input_size, 3), batch_size=1)
+    inputs = tf_keras.Input(shape=(input_size, input_size, 3), batch_size=1)
 
     num_filters = 256
     backbone = resnet.ResNet(model_id=50)

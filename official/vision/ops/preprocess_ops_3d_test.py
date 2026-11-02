@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
-
 import io
 import itertools
 import numpy as np
 from PIL import Image
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.ops import preprocess_ops_3d
 
@@ -73,6 +71,16 @@ class ParserUtilsTest(tf.test.TestCase):
     self.assertBetween(offset_3, 0, 99)
     self.assertAllEqual(sampled_seq_3, range(offset_3, offset_3 + 10))
 
+  def test_sample_segment_sequence(self):
+    sequence = tf.range(100)
+    sampled_seq_1 = preprocess_ops_3d.sample_segment_sequence(
+        sequence, 10, False)
+    sampled_seq_2 = preprocess_ops_3d.sample_segment_sequence(
+        sequence, 10, True)
+    self.assertAllEqual(sampled_seq_1, [5 + i * 10 for i in range(10)])
+    for idx, v in enumerate(sampled_seq_2):
+      self.assertBetween(v - idx * 10, 0, 10)
+
   def test_decode_jpeg(self):
     # Create a random RGB JPEG image.
     random_image = np.random.randint(0, 256, size=(263, 320, 3), dtype=np.uint8)
@@ -83,6 +91,33 @@ class ParserUtilsTest(tf.test.TestCase):
 
     raw_image = tf.constant([raw_image_bytes, raw_image_bytes])
     decoded_image = preprocess_ops_3d.decode_jpeg(raw_image, 3)
+
+    self.assertEqual(decoded_image.shape.as_list()[3], 3)
+    self.assertAllEqual(decoded_image.shape, (2, 263, 320, 3))
+
+  def test_decode_image(self):
+    # Create a random RGB JPEG image.
+    random_image = np.random.randint(0, 256, size=(263, 320, 3), dtype=np.uint8)
+    random_image = Image.fromarray(random_image)
+    with io.BytesIO() as buffer:
+      random_image.save(buffer, format='JPEG')
+      raw_image_bytes = buffer.getvalue()
+
+    raw_image = tf.constant([raw_image_bytes, raw_image_bytes])
+    decoded_image = preprocess_ops_3d.decode_image(raw_image, 3)
+
+    self.assertEqual(decoded_image.shape.as_list()[3], 3)
+    self.assertAllEqual(decoded_image.shape, (2, 263, 320, 3))
+
+    # Create a random RGB PNG image.
+    random_image = np.random.randint(0, 256, size=(263, 320, 3), dtype=np.uint8)
+    random_image = Image.fromarray(random_image)
+    with io.BytesIO() as buffer:
+      random_image.save(buffer, format='PNG')
+      raw_image_bytes = buffer.getvalue()
+
+    raw_image = tf.constant([raw_image_bytes, raw_image_bytes])
+    decoded_image = preprocess_ops_3d.decode_image(raw_image, 3)
 
     self.assertEqual(decoded_image.shape.as_list()[3], 3)
     self.assertAllEqual(decoded_image.shape, (2, 263, 320, 3))
@@ -144,6 +179,25 @@ class ParserUtilsTest(tf.test.TestCase):
     flipped = np.broadcast_to(flipped, (6, 90, 120, 3))
     self.assertTrue((flipped_frames == self._np_frames).numpy().all() or (
         flipped_frames == flipped).numpy().all())
+
+  def test_random_rotation(self):
+    rotated_frames = preprocess_ops_3d.random_rotation(self._frames)
+
+    rotated_once = np.rot90(self._np_frames[0, :, :, 0], 1)
+    rotated_twice = np.rot90(self._np_frames[0, :, :, 0], 2)
+    rotated_thrice = np.rot90(self._np_frames[0, :, :, 0], 3)
+    rotated_once = rotated_once[np.newaxis, :, :, np.newaxis]
+    rotated_twice = rotated_twice[np.newaxis, :, :, np.newaxis]
+    rotated_thrice = rotated_thrice[np.newaxis, :, :, np.newaxis]
+    rotated_once = np.broadcast_to(rotated_once, (6, 120, 90, 3))
+    rotated_twice = np.broadcast_to(rotated_twice, (6, 90, 120, 3))
+    rotated_thrice = np.broadcast_to(rotated_thrice, (6, 120, 90, 3))
+    self.assertTrue(
+        (rotated_frames == self._np_frames).numpy().all()
+        or (rotated_frames == rotated_once).numpy().all()
+        or (rotated_frames == rotated_twice).numpy().all()
+        or (rotated_frames == rotated_thrice).numpy().all()
+    )
 
   def test_normalize_image(self):
     normalized_images_1 = preprocess_ops_3d.normalize_image(

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,8 @@
 import dataclasses
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
-# Import libraries
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import tf_utils
 from official.modeling.hyperparams import base_config
@@ -26,7 +25,7 @@ from official.modeling.hyperparams import oneof
 from official.projects.edgetpu.vision.modeling import common_modules
 from official.projects.edgetpu.vision.modeling import custom_layers
 
-InitializerType = Optional[Union[str, tf.keras.initializers.Initializer]]
+InitializerType = Optional[Union[str, tf_keras.initializers.Initializer]]
 
 
 @dataclasses.dataclass
@@ -43,7 +42,7 @@ class BlockType(oneof.OneOfConfig):
 @dataclasses.dataclass
 class BlockSearchConfig(base_config.Config):
   """Config for searchable BlockConfig parameters."""
-  op_type: BlockType = BlockType()
+  op_type: BlockType = dataclasses.field(default_factory=BlockType)
   kernel_size: Optional[int] = None
   expand_ratio: Optional[int] = None
   stride: Optional[int] = None
@@ -363,7 +362,7 @@ def autoseg_edgetpu_backbone_base(
       'drop_connect_rate': drop_connect_rate,
   }
   if blocks_overrides:
-    param_overrides['blocks'] = blocks_overrides
+    param_overrides['blocks'] = blocks_overrides  # pyrefly: ignore[bad-assignment]
   config = config.replace(**param_overrides)
   return config
 
@@ -661,7 +660,7 @@ def round_filters(filters: int,
   if not width_coefficient:
     return filters
 
-  filters *= width_coefficient
+  filters *= width_coefficient  # pyrefly: ignore[bad-assignment]
   min_depth = min_depth or divisor
   new_filters = max(min_depth, int(filters + divisor / 2) // divisor * divisor)
   # Make sure that round down does not go down by more than 10%.
@@ -684,22 +683,22 @@ def groupconv2d_block(conv_filters: Optional[int],
                       use_batch_norm: bool = True,
                       use_bias: bool = False,
                       activation: Any = None,
-                      name: Optional[str] = None) -> tf.keras.layers.Layer:
+                      name: Optional[str] = None) -> tf_keras.layers.Layer:
   """2D group convolution with batchnorm and activation."""
   batch_norm = common_modules.get_batch_norm(config.batch_norm)
   bn_momentum = config.bn_momentum
   bn_epsilon = config.bn_epsilon
-  data_format = tf.keras.backend.image_data_format()
+  data_format = tf_keras.backend.image_data_format()
   weight_decay = config.weight_decay
   if group_size is None:
     group_size = config.group_base_size
 
   name = name or ''
   # Compute the # of groups
-  if conv_filters % group_size != 0:
+  if conv_filters % group_size != 0:  # pyrefly: ignore[unsupported-operation]
     raise ValueError(f'Number of filters: {conv_filters} is not divisible by '
                      f'size of the groups: {group_size}')
-  groups = int(conv_filters / group_size)
+  groups = int(conv_filters / group_size)  # pyrefly: ignore[unsupported-operation]
   # Collect args based on what kind of groupconv2d block is desired
   init_kwargs = {
       'kernel_size': kernel_size,
@@ -707,8 +706,8 @@ def groupconv2d_block(conv_filters: Optional[int],
       'use_bias': use_bias,
       'padding': 'same',
       'name': name + '_groupconv2d',
-      'kernel_regularizer': tf.keras.regularizers.l2(weight_decay),
-      'bias_regularizer': tf.keras.regularizers.l2(weight_decay),
+      'kernel_regularizer': tf_keras.regularizers.l2(weight_decay),
+      'bias_regularizer': tf_keras.regularizers.l2(weight_decay),
       'filters': conv_filters,
       'groups': groups,
       'batch_norm_layer': batch_norm if use_batch_norm else None,
@@ -730,12 +729,12 @@ def conv2d_block_as_layers(
     activation: Any = None,
     depthwise: bool = False,
     kernel_initializer: InitializerType = None,
-    name: Optional[str] = None) -> List[tf.keras.layers.Layer]:
+    name: Optional[str] = None) -> List[tf_keras.layers.Layer]:
   """A conv2d followed by batch norm and an activation."""
   batch_norm = common_modules.get_batch_norm(config.batch_norm)
   bn_momentum = config.bn_momentum
   bn_epsilon = config.bn_epsilon
-  data_format = tf.keras.backend.image_data_format()
+  data_format = tf_keras.backend.image_data_format()
   weight_decay = config.weight_decay
 
   name = name or ''
@@ -747,22 +746,22 @@ def conv2d_block_as_layers(
       'use_bias': use_bias,
       'padding': 'same',
       'name': name + '_conv2d',
-      'kernel_regularizer': tf.keras.regularizers.l2(weight_decay),
-      'bias_regularizer': tf.keras.regularizers.l2(weight_decay),
+      'kernel_regularizer': tf_keras.regularizers.l2(weight_decay),
+      'bias_regularizer': tf_keras.regularizers.l2(weight_decay),
   }
 
-  sequential_layers: List[tf.keras.layers.Layer] = []
+  sequential_layers: List[tf_keras.layers.Layer] = []
   if depthwise:
-    conv2d = tf.keras.layers.DepthwiseConv2D
+    conv2d = tf_keras.layers.DepthwiseConv2D
     init_kwargs.update({'depthwise_initializer': kernel_initializer})
   else:
-    conv2d = tf.keras.layers.Conv2D
+    conv2d = tf_keras.layers.Conv2D
     init_kwargs.update({
         'filters': conv_filters,
         'kernel_initializer': kernel_initializer
     })
 
-  sequential_layers.append(conv2d(**init_kwargs))
+  sequential_layers.append(conv2d(**init_kwargs))  # pyrefly: ignore[missing-argument]
 
   if use_batch_norm:
     bn_axis = 1 if data_format == 'channels_first' else -1
@@ -775,7 +774,7 @@ def conv2d_block_as_layers(
 
   if activation is not None:
     sequential_layers.append(
-        tf.keras.layers.Activation(activation, name=name + '_activation'))
+        tf_keras.layers.Activation(activation, name=name + '_activation'))
   return sequential_layers
 
 
@@ -807,7 +806,7 @@ def conv2d_block(inputs: tf.Tensor,
   return x
 
 
-# Do not inherit from (tf.keras.layers.Layer), will break weights loading.
+# Do not inherit from (tf_keras.layers.Layer), will break weights loading.
 class _MbConvBlock:
   """Mobile Inverted Residual Bottleneck composite layer."""
 
@@ -819,11 +818,11 @@ class _MbConvBlock:
       se = x
       for layer in self.squeeze_excitation:
         se = layer(se)
-      x = tf.keras.layers.multiply([x, se], name=self.name + 'se_excite')
+      x = tf_keras.layers.multiply([x, se], name=self.name + 'se_excite')
     for layer in self.project_block:
       x = layer(x)
     if self.has_skip_add:
-      x = tf.keras.layers.add([x, inputs], name=self.name + 'add')
+      x = tf_keras.layers.add([x, inputs], name=self.name + 'add')
     return x
 
   def __init__(self,
@@ -840,7 +839,7 @@ class _MbConvBlock:
     use_se = config.use_se
     activation = tf_utils.get_activation(config.activation)
     drop_connect_rate = config.drop_connect_rate
-    data_format = tf.keras.backend.image_data_format()
+    data_format = tf_keras.backend.image_data_format()
     use_depthwise = block.conv_type == 'depthwise'
     use_groupconv = block.conv_type == 'group'
     prefix = prefix or ''
@@ -851,9 +850,9 @@ class _MbConvBlock:
 
     filters = block.input_filters * block.expand_ratio
 
-    self.expand_block: List[tf.keras.layers.Layer] = []
-    self.squeeze_excitation: List[tf.keras.layers.Layer] = []
-    self.project_block: List[tf.keras.layers.Layer] = []
+    self.expand_block: List[tf_keras.layers.Layer] = []
+    self.squeeze_excitation: List[tf_keras.layers.Layer] = []
+    self.project_block: List[tf_keras.layers.Layer] = []
 
     if block.fused_project:
       raise NotImplementedError('Fused projection is not supported.')
@@ -878,7 +877,7 @@ class _MbConvBlock:
                 kernel_size=block.kernel_size,
                 strides=block.strides,
                 activation=activation,
-                kernel_initializer=conv_kernel_initializer,
+                kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
                 name=prefix + 'fused'))
     else:
       if block.expand_ratio != 1:
@@ -889,7 +888,7 @@ class _MbConvBlock:
                 config=config,
                 kernel_size=(1, 1),
                 activation=activation,
-                kernel_initializer=conv_kernel_initializer,
+                kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
                 name=prefix + 'expand'))
 
       # Main kernel, after the expansion (if applicable, i.e. not fused).
@@ -900,7 +899,7 @@ class _MbConvBlock:
             kernel_size=block.kernel_size,
             strides=block.strides,
             activation=activation,
-            kernel_initializer=conv_kernel_initializer,
+            kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
             depthwise=True,
             name=prefix + 'depthwise'))
       elif use_groupconv:
@@ -927,9 +926,9 @@ class _MbConvBlock:
         se_shape = (1, 1, filters)
 
       self.squeeze_excitation.append(
-          tf.keras.layers.GlobalAveragePooling2D(name=prefix + 'se_squeeze'))
+          tf_keras.layers.GlobalAveragePooling2D(name=prefix + 'se_squeeze'))
       self.squeeze_excitation.append(
-          tf.keras.layers.Reshape(se_shape, name=prefix + 'se_reshape'))
+          tf_keras.layers.Reshape(se_shape, name=prefix + 'se_reshape'))
       self.squeeze_excitation.extend(
           conv2d_block_as_layers(
               conv_filters=num_reduced_filters,
@@ -937,7 +936,7 @@ class _MbConvBlock:
               use_bias=True,
               use_batch_norm=False,
               activation=activation,
-              kernel_initializer=conv_kernel_initializer,
+              kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
               name=prefix + 'se_reduce'))
       self.squeeze_excitation.extend(
           conv2d_block_as_layers(
@@ -946,7 +945,7 @@ class _MbConvBlock:
               use_bias=True,
               use_batch_norm=False,
               activation='sigmoid',
-              kernel_initializer=conv_kernel_initializer,
+              kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
               name=prefix + 'se_expand'))
 
     # Output phase
@@ -955,13 +954,13 @@ class _MbConvBlock:
             conv_filters=block.output_filters,
             config=config,
             activation=None,
-            kernel_initializer=conv_kernel_initializer,
+            kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
             name=prefix + 'project'))
 
     # Add identity so that quantization-aware training can insert quantization
     # ops correctly.
     self.project_block.append(
-        tf.keras.layers.Activation('linear', name=prefix + 'id'))
+        tf_keras.layers.Activation('linear', name=prefix + 'id'))
 
     self.has_skip_add = False
     if (block.id_skip
@@ -974,7 +973,7 @@ class _MbConvBlock:
         # by drop_connect_rate during training. See:
         # https://github.com/keras-team/keras/pull/9898#issuecomment-380577612
         self.project_block.append(
-            tf.keras.layers.Dropout(
+            tf_keras.layers.Dropout(
                 drop_connect_rate,
                 noise_shape=(None, 1, 1, 1),
                 name=prefix + 'drop'))
@@ -998,12 +997,12 @@ def mb_conv_block(inputs: tf.Tensor,
   return _MbConvBlock(block, config, prefix)(inputs)
 
 
-def mobilenet_edgetpu_v2(image_input: tf.keras.layers.Input,
+def mobilenet_edgetpu_v2(image_input: tf_keras.layers.Input,  # pyrefly: ignore[not-a-type]
                          config: ModelConfig):  # pytype: disable=invalid-annotation  # typed-keras
   """Creates a MobilenetEdgeTPUV2 graph given the model parameters.
 
   This function is wrapped by the `MobilenetEdgeTPUV2` class to make a
-  tf.keras.Model.
+  tf_keras.Model.
 
   Args:
     image_input: the input batch of images
@@ -1030,14 +1029,14 @@ def mobilenet_edgetpu_v2(image_input: tf.keras.layers.Input,
   num_classes = config.num_classes
   input_channels = config.input_channels
   rescale_input = config.rescale_input
-  data_format = tf.keras.backend.image_data_format()
+  data_format = tf_keras.backend.image_data_format()
   dtype = config.dtype
   weight_decay = config.weight_decay
 
   x = image_input
   if data_format == 'channels_first':
     # Happens on GPU/TPU if available.
-    x = tf.keras.layers.Permute((3, 1, 2))(x)
+    x = tf_keras.layers.Permute((3, 1, 2))(x)
   if rescale_input:
     x = common_modules.normalize_images(
         x, num_channels=input_channels, dtype=dtype, data_format=data_format)
@@ -1050,7 +1049,7 @@ def mobilenet_edgetpu_v2(image_input: tf.keras.layers.Input,
       kernel_size=[stem_kernel_size, stem_kernel_size],
       strides=[2, 2],
       activation=activation,
-      kernel_initializer=conv_kernel_initializer,
+      kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
       name='stem')
 
   # Build blocks
@@ -1101,23 +1100,23 @@ def mobilenet_edgetpu_v2(image_input: tf.keras.layers.Input,
       conv_filters=round_filters(top_base_filters, config),
       config=config,
       activation=activation,
-      kernel_initializer=conv_kernel_initializer,
+      kernel_initializer=conv_kernel_initializer,  # pyrefly: ignore[bad-argument-type]
       name='top')
 
   # Build classifier
   pool_size = (x.shape.as_list()[1], x.shape.as_list()[2])
-  x = tf.keras.layers.AveragePooling2D(pool_size, name='top_pool')(x)
+  x = tf_keras.layers.AveragePooling2D(pool_size, name='top_pool')(x)
   if dropout_rate and dropout_rate > 0:
-    x = tf.keras.layers.Dropout(dropout_rate, name='top_dropout')(x)
-  x = tf.keras.layers.Conv2D(
+    x = tf_keras.layers.Dropout(dropout_rate, name='top_dropout')(x)
+  x = tf_keras.layers.Conv2D(
       num_classes,
       1,
       kernel_initializer=dense_kernel_initializer,
-      kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-      bias_regularizer=tf.keras.regularizers.l2(weight_decay),
+      kernel_regularizer=tf_keras.regularizers.l2(weight_decay),
+      bias_regularizer=tf_keras.regularizers.l2(weight_decay),
       name='logits')(
           x)
-  x = tf.keras.layers.Activation('softmax', name='probs')(x)
+  x = tf_keras.layers.Activation('softmax', name='probs')(x)
   x = tf.squeeze(x, axis=[1, 2])
 
   return x

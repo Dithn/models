@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,17 +15,13 @@
 """Tests for BERT trainer network."""
 
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.nlp.modeling import networks
 from official.nlp.modeling.models import bert_span_labeler
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class BertSpanLabelerTest(keras_parameterized.TestCase):
+class BertSpanLabelerTest(tf.test.TestCase, parameterized.TestCase):
 
   @parameterized.parameters(True, False)
   def test_bert_trainer(self, dict_outputs):
@@ -40,15 +36,15 @@ class BertSpanLabelerTest(keras_parameterized.TestCase):
     bert_trainer_model = bert_span_labeler.BertSpanLabeler(test_network)
 
     # Create a set of 2-dimensional inputs (the first dimension is implicit).
-    word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    word_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    mask = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    type_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
 
     # Invoke the trainer model on the inputs. This causes the layer to be built.
     cls_outs = bert_trainer_model([word_ids, mask, type_ids])
 
     # Validate that there are 2 outputs are of the expected shape.
-    self.assertEqual(2, len(cls_outs))
+    self.assertLen(cls_outs, 2)
     expected_shape = [None, sequence_length]
     for out in cls_outs:
       self.assertAllEqual(expected_shape, out.shape.as_list())

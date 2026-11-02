@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """Multi scale anchor generator definition."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 # (TODO/tanzheny): consider having customized anchor offset.
@@ -47,7 +47,7 @@ class _SingleAnchorGenerator:
       stride: A single int represents the anchor stride size between center of
         each anchor.
       clip_boxes: Boolean to represent whether the anchor coordinates should be
-        clipped to the image size. Defaults to `True`.
+        clipped to the image size. Defaults to `False`.
     Input shape: the size of the image, `[H, W, C]`
     Output shape: the size of anchors, `[(H / stride) * (W / stride), 4]`
     """
@@ -81,9 +81,9 @@ class _SingleAnchorGenerator:
 
     stride = tf.cast(self.stride, tf.float32)
     # [W]
-    cx = tf.range(0.5 * stride, image_width, stride)
+    cx = tf.range(0.5 * stride, image_width + 0.5 * stride, stride)
     # [H]
-    cy = tf.range(0.5 * stride, image_height, stride)
+    cy = tf.range(0.5 * stride, image_height + 0.5 * stride, stride)
     # [H, W]
     cx_grid, cy_grid = tf.meshgrid(cx, cy)
     # [H, W, 1]
@@ -109,7 +109,7 @@ class _SingleAnchorGenerator:
     return tf.reshape(result, [shape[0], shape[1], shape[2] * shape[3]])
 
 
-class AnchorGenerator():
+class AnchorGeneratorv1():
   """Utility to generate anchors for a multiple feature maps.
 
   Example:

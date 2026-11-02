@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import dataclasses
 from typing import Any, Mapping
 from absl import logging
 import six
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import streamz_counters
 from official.modeling.fast_training.progressive import utils
@@ -69,7 +69,7 @@ class ProgressivePolicy:
         shape=[])
     self._volatiles.reassign_trackable(
         optimizer=self.get_optimizer(stage_id),
-        model=self.get_model(stage_id, old_model=None))  # pytype: disable=wrong-arg-types  # typed-keras
+        model=self.get_model(stage_id, old_model=None))  # pyrefly: ignore[bad-argument-type]
 
     streamz_counters.progressive_policy_creation_counter.get_cell(
         ).increase_by(1)
@@ -96,12 +96,12 @@ class ProgressivePolicy:
   @abc.abstractmethod
   def get_model(self,
                 stage_id: int,
-                old_model: tf.keras.Model = None) -> tf.keras.Model:  # pytype: disable=annotation-type-mismatch  # typed-keras
+                old_model: tf_keras.Model = None) -> tf_keras.Model:  # pyrefly: ignore[bad-function-definition]
     """Return model for this stage. For initialization, `old_model` = None."""
     pass
 
   @abc.abstractmethod
-  def get_optimizer(self, stage_id: int) -> tf.keras.optimizers.Optimizer:
+  def get_optimizer(self, stage_id: int) -> tf_keras.optimizers.Optimizer:
     """Return optimizer for this stage."""
     pass
 
@@ -116,7 +116,7 @@ class ProgressivePolicy:
     pass
 
   @property
-  def cur_model(self) -> tf.keras.Model:
+  def cur_model(self) -> tf_keras.Model:
     return self._volatiles.model
 
   @property
@@ -132,7 +132,7 @@ class ProgressivePolicy:
     return self._cur_eval_dataset
 
   @property
-  def cur_optimizer(self) -> tf.keras.optimizers.Optimizer:
+  def cur_optimizer(self) -> tf_keras.optimizers.Optimizer:
     return self._volatiles.optimizer
 
   @property
@@ -174,5 +174,5 @@ class ProgressivePolicy:
     new_optimizer = self.get_optimizer(new_stage_id)
     self._volatiles.reassign_trackable(optimizer=new_optimizer)
     new_model = self.get_model(
-        new_stage_id, old_model=self.cur_model if pass_old_model else None)
+        new_stage_id, old_model=self.cur_model if pass_old_model else None)  # pyrefly: ignore[bad-argument-type]
     self._volatiles.reassign_trackable(model=new_model)

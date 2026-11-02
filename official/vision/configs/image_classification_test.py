@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for image_classification."""
 # pylint: disable=unused-import
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official import vision
 from official.core import config_definitions as cfg
@@ -30,7 +29,10 @@ class ImageClassificationConfigTest(tf.test.TestCase, parameterized.TestCase):
       ('resnet_imagenet',),
       ('resnet_rs_imagenet',),
       ('revnet_imagenet',),
-      ('mobilenet_imagenet'),
+      ('mobilenet_imagenet',),
+      ('deit_imagenet_pretrain',),
+      ('vit_imagenet_pretrain',),
+      ('vit_imagenet_finetune',),
   )
   def test_image_classification_configs(self, config_name):
     config = exp_factory.get_exp_config(config_name)

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,17 +14,21 @@
 
 """Defines the base task abstraction."""
 import abc
+import functools
 from typing import Optional
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import config_definitions
 from official.modeling import optimization
 from official.modeling import performance
+from official.modeling.privacy import configs
+from official.modeling.privacy import ops
 
 OptimizationConfig = optimization.OptimizationConfig
 RuntimeConfig = config_definitions.RuntimeConfig
+DifferentialPrivacyConfig = configs.DifferentialPrivacyConfig
 
 
 class Task(tf.Module, metaclass=abc.ABCMeta):
@@ -53,7 +57,9 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
     """
     super().__init__(name=name)
     self._task_config = params
-    self._logging_dir = logging_dir
+    self._logging_dir = (
+        logging_dir or ""
+    )  # Empty directory hints current working dir.
 
   @property
   def task_config(self):
@@ -65,18 +71,35 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
 
   @classmethod
   def create_optimizer(cls, optimizer_config: OptimizationConfig,
-                       runtime_config: Optional[RuntimeConfig] = None):
+                       runtime_config: Optional[RuntimeConfig] = None,
+                       dp_config: Optional[DifferentialPrivacyConfig] = None):
     """Creates an TF optimizer from configurations.
 
     Args:
       optimizer_config: the parameters of the Optimization settings.
       runtime_config: the parameters of the runtime.
+      dp_config: the parameter of differential privacy.
 
     Returns:
       A tf.optimizers.Optimizer object.
     """
+    gradient_transformers = None
+    if dp_config is not None:
+      logging.info("Adding differential privacy transform with config %s.",
+                   dp_config.as_dict())
+      noise_stddev = dp_config.clipping_norm * dp_config.noise_multiplier
+      gradient_transformers = [
+          functools.partial(
+              ops.clip_l2_norm, l2_norm_clip=dp_config.clipping_norm),
+          functools.partial(
+              ops.add_noise, noise_stddev=noise_stddev)
+      ]
+
     opt_factory = optimization.OptimizerFactory(optimizer_config)
-    optimizer = opt_factory.build_optimizer(opt_factory.build_learning_rate())
+    optimizer = opt_factory.build_optimizer(
+        opt_factory.build_learning_rate(),
+        gradient_transformers=gradient_transformers
+        )
     # Configuring optimizer when loss_scale is set in runtime config. This helps
     # avoiding overflow/underflow for float16 computations.
     if runtime_config:
@@ -87,7 +110,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
 
     return optimizer
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """[Optional] A callback function used as CheckpointManager's init_fn.
 
     This function will be called when no checkpoint is found for the model.
@@ -118,7 +141,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
     logging.info("Finished loading pretrained checkpoint from %s",
                  ckpt_dir_or_file)
 
-  def build_model(self) -> tf.keras.Model:
+  def build_model(self) -> tf_keras.Model:  # pyrefly: ignore[bad-return]
     """[Optional] Creates model architecture.
 
     Returns:
@@ -199,8 +222,8 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
 
   def train_step(self,
                  inputs,
-                 model: tf.keras.Model,
-                 optimizer: tf.keras.optimizers.Optimizer,
+                 model: tf_keras.Model,
+                 optimizer: tf_keras.optimizers.Optimizer,
                  metrics=None):
     """Does forward and backward.
 
@@ -237,14 +260,14 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
       # For mixed precision, when a LossScaleOptimizer is used, the loss is
       # scaled to avoid numeric underflow.
       if isinstance(optimizer,
-                    tf.keras.mixed_precision.LossScaleOptimizer):
+                    tf_keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)
 
     if isinstance(optimizer,
-                  tf.keras.mixed_precision.LossScaleOptimizer):
+                  tf_keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
     optimizer.apply_gradients(list(zip(grads, tvars)))
     logs = {self.loss: loss}
@@ -256,7 +279,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
       logs.update({m.name: m.result() for m in model.metrics})
     return logs
 
-  def validation_step(self, inputs, model: tf.keras.Model, metrics=None):
+  def validation_step(self, inputs, model: tf_keras.Model, metrics=None):
     """Validation step.
 
     With distribution strategies, this method runs on devices.
@@ -285,7 +308,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
       logs.update({m.name: m.result() for m in model.metrics})
     return logs
 
-  def inference_step(self, inputs, model: tf.keras.Model):
+  def inference_step(self, inputs, model: tf_keras.Model):
     """Performs the forward step.
 
     With distribution strategies, this method runs on devices.

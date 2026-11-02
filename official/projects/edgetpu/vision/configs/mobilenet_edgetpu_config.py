@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@
 import dataclasses
 import os
 from typing import Any, Mapping, Optional
-
-# Import libraries
 
 from official.core import config_definitions as cfg
 from official.core import exp_factory
@@ -60,7 +58,9 @@ class MobilenetEdgeTPUTaskConfig(base_config.ImageClassificationTask):
     saved_model_path: Instead of initializing a model from the model config,
       the model can be loaded from a file path.
   """
-  model: MobilenetEdgeTPUModelConfig = MobilenetEdgeTPUModelConfig()
+  model: MobilenetEdgeTPUModelConfig = dataclasses.field(
+      default_factory=MobilenetEdgeTPUModelConfig
+  )
   saved_model_path: Optional[str] = None
 
 
@@ -83,19 +83,19 @@ def mobilenet_edgetpu_base_experiment_config(
   eval_batch_size = 4096
   steps_per_epoch = IMAGENET_TRAIN_EXAMPLES // train_batch_size
   mobilenet_edgetpu_config = MobilenetEdgeTPUModelConfig(
-      num_classes=1001, input_size=[224, 224, 3])
-  mobilenet_edgetpu_config.model_params.model_name = model_name
+      num_classes=1001, input_size=[224, 224, 3])  # pyrefly: ignore[unexpected-keyword]
+  mobilenet_edgetpu_config.model_params.model_name = model_name  # pyrefly: ignore[missing-attribute]
   config = cfg.ExperimentConfig(
       task=MobilenetEdgeTPUTaskConfig(
           model=mobilenet_edgetpu_config,
-          losses=base_config.Losses(label_smoothing=0.1),
-          train_data=base_config.DataConfig(
+          losses=base_config.Losses(label_smoothing=0.1),  # pyrefly: ignore[unexpected-keyword]
+          train_data=base_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(IMAGENET_INPUT_PATH_BASE, 'train*'),
               is_training=True,
               global_batch_size=train_batch_size,
               dtype='bfloat16',
               aug_type=common.Augmentation(type='autoaug')),
-          validation_data=base_config.DataConfig(
+          validation_data=base_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(IMAGENET_INPUT_PATH_BASE, 'valid*'),
               is_training=False,
               dtype='bfloat16',

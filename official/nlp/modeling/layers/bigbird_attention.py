@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Keras-based bigbird attention layer."""
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 MAX_SEQ_LEN = 4096
 
@@ -368,7 +368,7 @@ def bigbird_block_sparse_attention(
   return context_layer
 
 
-class BigBirdMasks(tf.keras.layers.Layer):
+class BigBirdMasks(tf_keras.layers.Layer):
   """Creates bigbird attention masks."""
 
   def __init__(self, block_size, **kwargs):
@@ -390,8 +390,8 @@ class BigBirdMasks(tf.keras.layers.Layer):
     return [band_mask, encoder_from_mask, encoder_to_mask, blocked_encoder_mask]
 
 
-@tf.keras.utils.register_keras_serializable(package="Text")
-class BigBirdAttention(tf.keras.layers.MultiHeadAttention):
+@tf_keras.utils.register_keras_serializable(package="Text")
+class BigBirdAttention(tf_keras.layers.MultiHeadAttention):
   """BigBird, a sparse attention mechanism.
 
   This layer follows the paper "Big Bird: Transformers for Longer Sequences"
@@ -432,7 +432,7 @@ class BigBirdAttention(tf.keras.layers.MultiHeadAttention):
     self.rand_attn = tf.constant(rand_attn, dtype=tf.int32)
 
   def _compute_attention(self, query, key, value, attention_mask=None):
-    (band_mask, encoder_from_mask, encoder_to_mask,
+    (band_mask, encoder_from_mask, encoder_to_mask,  # pyrefly: ignore[not-iterable]
      blocked_encoder_mask) = attention_mask
     query_shape = tf.shape(query)
     from_seq_length = query_shape[1]
@@ -458,7 +458,7 @@ class BigBirdAttention(tf.keras.layers.MultiHeadAttention):
         to_block_size=self._to_block_size,
         rand_attn=rand_attn)
 
-  def call(self, query, value, key=None, attention_mask=None, **kwargs):
+  def call(self, query, value, key=None, attention_mask=None, **kwargs):  # pyrefly: ignore[bad-override]
     if not self._built_from_signature:
       self._build_from_signature(query=query, value=value, key=key)
     if key is None:

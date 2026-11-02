@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,12 +16,13 @@
 from typing import Any, List, Mapping, Optional, Tuple
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import dataset_fn
 from official.core import base_task
 from official.core import task_factory
 from official.vision.configs import retinanet as exp_cfg
+from official.vision.dataloaders import input_reader
 from official.vision.dataloaders import input_reader_factory
 from official.vision.dataloaders import retinanet_input
 from official.vision.dataloaders import tf_example_decoder
@@ -31,6 +32,7 @@ from official.vision.evaluation import coco_evaluator
 from official.vision.losses import focal_loss
 from official.vision.losses import loss_utils
 from official.vision.modeling import factory
+from official.vision.utils.object_detection import visualization_utils
 
 
 @task_factory.register_task_cls(exp_cfg.RetinaNetTask)
@@ -45,23 +47,27 @@ class RetinaNetTask(base_task.Task):
   def build_model(self):
     """Build RetinaNet model."""
 
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None] + self.task_config.model.input_size)
 
     l2_weight_decay = self.task_config.losses.l2_weight_decay
     # Divide weight decay by 2.0 to match the implementation of tf.nn.l2_loss.
     # (https://www.tensorflow.org/api_docs/python/tf/keras/regularizers/l2)
     # (https://www.tensorflow.org/api_docs/python/tf/nn/l2_loss)
-    l2_regularizer = (tf.keras.regularizers.l2(
+    l2_regularizer = (tf_keras.regularizers.l2(
         l2_weight_decay / 2.0) if l2_weight_decay else None)
 
     model = factory.build_retinanet(
         input_specs=input_specs,
         model_config=self.task_config.model,
         l2_regularizer=l2_regularizer)
+
+    if self.task_config.freeze_backbone:
+      model.backbone.trainable = False
+
     return model
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """Loading pretrained checkpoint."""
     if not self.task_config.init_checkpoint:
       return
@@ -100,7 +106,9 @@ class RetinaNetTask(base_task.Task):
       decoder_cfg = params.decoder.get()
       if params.decoder.type == 'simple_decoder':
         decoder = tf_example_decoder.TfExampleDecoder(
-            regenerate_source_id=decoder_cfg.regenerate_source_id)
+            regenerate_source_id=decoder_cfg.regenerate_source_id,
+            attribute_names=decoder_cfg.attribute_names,
+        )
       elif params.decoder.type == 'label_map_decoder':
         decoder = tf_example_label_map_decoder.TfExampleDecoderLabelMap(
             label_map=decoder_cfg.label_map,
@@ -119,17 +127,25 @@ class RetinaNetTask(base_task.Task):
         dtype=params.dtype,
         match_threshold=params.parser.match_threshold,
         unmatched_threshold=params.parser.unmatched_threshold,
+        box_coder_weights=(
+            self.task_config.model.detection_generator.box_coder_weights
+        ),
         aug_type=params.parser.aug_type,
         aug_rand_hflip=params.parser.aug_rand_hflip,
+        aug_rand_jpeg=params.parser.aug_rand_jpeg,
         aug_scale_min=params.parser.aug_scale_min,
         aug_scale_max=params.parser.aug_scale_max,
         skip_crowd_during_training=params.parser.skip_crowd_during_training,
-        max_num_instances=params.parser.max_num_instances)
+        max_num_instances=params.parser.max_num_instances,
+        pad=params.parser.pad,
+        keep_aspect_ratio=params.parser.keep_aspect_ratio,
+    )
 
     reader = input_reader_factory.input_reader_generator(
         params,
         dataset_fn=dataset_fn.pick_dataset_fn(params.file_type),
         decoder_fn=decoder.decode,
+        combine_fn=input_reader.create_combine_fn(params),
         parser_fn=parser.parse_fn(params.is_training))
     dataset = reader.read(input_context=input_context)
 
@@ -151,6 +167,7 @@ class RetinaNetTask(base_task.Task):
     Returns:
       Attribute loss of all attribute heads.
     """
+    params = self.task_config
     attribute_loss = 0.0
     for head in attribute_heads:
       if head.name not in labels['attribute_targets']:
@@ -158,27 +175,49 @@ class RetinaNetTask(base_task.Task):
       if head.name not in outputs['attribute_outputs']:
         raise ValueError(f'Attribute {head.name} not found in model outputs.')
 
-      y_true_att = loss_utils.multi_level_flatten(
-          labels['attribute_targets'][head.name], last_dim=head.size)
-      y_pred_att = loss_utils.multi_level_flatten(
-          outputs['attribute_outputs'][head.name], last_dim=head.size)
       if head.type == 'regression':
-        att_loss_fn = tf.keras.losses.Huber(
-            1.0, reduction=tf.keras.losses.Reduction.SUM)
+        y_true_att = loss_utils.multi_level_flatten(
+            labels['attribute_targets'][head.name], last_dim=head.size
+        )
+        y_pred_att = loss_utils.multi_level_flatten(
+            outputs['attribute_outputs'][head.name], last_dim=head.size
+        )
+        att_loss_fn = tf_keras.losses.Huber(
+            1.0, reduction=tf_keras.losses.Reduction.SUM)
         att_loss = att_loss_fn(
             y_true=y_true_att,
             y_pred=y_pred_att,
             sample_weight=box_sample_weight)
+      elif head.type == 'classification':
+        y_true_att = loss_utils.multi_level_flatten(
+            labels['attribute_targets'][head.name], last_dim=None
+        )
+        y_true_att = tf.one_hot(y_true_att, head.size)
+        y_pred_att = loss_utils.multi_level_flatten(
+            outputs['attribute_outputs'][head.name], last_dim=head.size
+        )
+        cls_loss_fn = focal_loss.FocalLoss(
+            alpha=params.losses.focal_loss_alpha,
+            gamma=params.losses.focal_loss_gamma,
+            reduction=tf_keras.losses.Reduction.SUM,
+        )
+        att_loss = cls_loss_fn(
+            y_true=y_true_att,
+            y_pred=y_pred_att,
+            sample_weight=box_sample_weight,
+        )
       else:
         raise ValueError(f'Attribute type {head.type} not supported.')
       attribute_loss += att_loss
 
     return attribute_loss
 
-  def build_losses(self,
-                   outputs: Mapping[str, Any],
-                   labels: Mapping[str, Any],
-                   aux_losses: Optional[Any] = None):
+  def build_losses(
+      self,
+      outputs: Mapping[str, Any],
+      labels: Mapping[str, Any],
+      aux_losses: Optional[Any] = None,
+  ):
     """Build RetinaNet losses."""
     params = self.task_config
     attribute_heads = self.task_config.model.head.attribute_heads
@@ -186,9 +225,9 @@ class RetinaNetTask(base_task.Task):
     cls_loss_fn = focal_loss.FocalLoss(
         alpha=params.losses.focal_loss_alpha,
         gamma=params.losses.focal_loss_gamma,
-        reduction=tf.keras.losses.Reduction.SUM)
-    box_loss_fn = tf.keras.losses.Huber(
-        params.losses.huber_loss_delta, reduction=tf.keras.losses.Reduction.SUM)
+        reduction=tf_keras.losses.Reduction.SUM)
+    box_loss_fn = tf_keras.losses.Huber(
+        params.losses.huber_loss_delta, reduction=tf_keras.losses.Reduction.SUM)
 
     # Sums all positives in a batch for normalization and avoids zero
     # num_positives_sum, which would lead to inf loss during training
@@ -232,17 +271,23 @@ class RetinaNetTask(base_task.Task):
     metrics = []
     metric_names = ['total_loss', 'cls_loss', 'box_loss', 'model_loss']
     for name in metric_names:
-      metrics.append(tf.keras.metrics.Mean(name, dtype=tf.float32))
+      metrics.append(tf_keras.metrics.Mean(name, dtype=tf.float32))
 
     if not training:
-      if self.task_config.validation_data.tfds_name and self.task_config.annotation_file:
+      if (
+          self.task_config.validation_data.tfds_name
+          and self.task_config.annotation_file
+      ):
         raise ValueError(
-            "Can't evaluate using annotation file when TFDS is used.")
+            "Can't evaluate using annotation file when TFDS is used."
+        )
       if self._task_config.use_coco_metrics:
         self.coco_metric = coco_evaluator.COCOEvaluator(
             annotation_file=self.task_config.annotation_file,
             include_mask=False,
-            per_category_metrics=self.task_config.per_category_metrics)
+            per_category_metrics=self.task_config.per_category_metrics,
+            max_num_eval_detections=self.task_config.max_num_eval_detections,
+        )
       if self._task_config.use_wod_metrics:
         # To use Waymo open dataset metrics, please install one of the pip
         # package `waymo-open-dataset-tf-*` from
@@ -262,8 +307,8 @@ class RetinaNetTask(base_task.Task):
 
   def train_step(self,
                  inputs: Tuple[Any, Any],
-                 model: tf.keras.Model,
-                 optimizer: tf.keras.optimizers.Optimizer,
+                 model: tf_keras.Model,
+                 optimizer: tf_keras.optimizers.Optimizer,
                  metrics: Optional[List[Any]] = None):
     """Does forward and backward.
 
@@ -285,18 +330,19 @@ class RetinaNetTask(base_task.Task):
 
       # Computes per-replica loss.
       loss, cls_loss, box_loss, model_loss = self.build_losses(
-          outputs=outputs, labels=labels, aux_losses=model.losses)
+          outputs=outputs, labels=labels, aux_losses=model.losses
+      )
       scaled_loss = loss / num_replicas
 
       # For mixed_precision policy, when LossScaleOptimizer is used, loss is
       # scaled for numerical stability.
-      if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+      if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)
     # Scales back gradient when LossScaleOptimizer is used.
-    if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+    if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
     optimizer.apply_gradients(list(zip(grads, tvars)))
 
@@ -317,9 +363,9 @@ class RetinaNetTask(base_task.Task):
 
   def validation_step(self,
                       inputs: Tuple[Any, Any],
-                      model: tf.keras.Model,
+                      model: tf_keras.Model,
                       metrics: Optional[List[Any]] = None):
-    """Validatation step.
+    """Validation step.
 
     Args:
       inputs: a dictionary of input tensors.
@@ -335,7 +381,8 @@ class RetinaNetTask(base_task.Task):
                     image_shape=labels['image_info'][:, 1, :],
                     training=False)
     loss, cls_loss, box_loss, model_loss = self.build_losses(
-        outputs=outputs, labels=labels, aux_losses=model.losses)
+        outputs=outputs, labels=labels, aux_losses=model.losses
+    )
     logs = {self.loss: loss}
 
     all_losses = {
@@ -372,23 +419,40 @@ class RetinaNetTask(base_task.Task):
       for m in metrics:
         m.update_state(all_losses[m.name])
         logs.update({m.name: m.result()})
+
+    if (
+        hasattr(self.task_config, 'allow_image_summary')
+        and self.task_config.allow_image_summary
+    ):
+      logs.update(
+          {'visualization': (tf.cast(features, dtype=tf.float32), outputs)}
+      )
     return logs
 
   def aggregate_logs(self, state=None, step_outputs=None):
     if self._task_config.use_coco_metrics:
       if state is None:
         self.coco_metric.reset_states()
-      self.coco_metric.update_state(step_outputs[self.coco_metric.name][0],
-                                    step_outputs[self.coco_metric.name][1])
+      self.coco_metric.update_state(step_outputs[self.coco_metric.name][0],  # pyrefly: ignore[unsupported-operation]
+                                    step_outputs[self.coco_metric.name][1])  # pyrefly: ignore[unsupported-operation]
     if self._task_config.use_wod_metrics:
       if state is None:
         self.wod_metric.reset_states()
-      self.wod_metric.update_state(step_outputs[self.wod_metric.name][0],
-                                   step_outputs[self.wod_metric.name][1])
+      self.wod_metric.update_state(step_outputs[self.wod_metric.name][0],  # pyrefly: ignore[unsupported-operation]
+                                   step_outputs[self.wod_metric.name][1])  # pyrefly: ignore[unsupported-operation]
+
+    if 'visualization' in step_outputs:  # pyrefly: ignore[not-iterable]
+      # Update detection state for writing summary if there are artifacts for
+      # visualization.
+      if state is None:
+        state = {}
+      state.update(visualization_utils.update_detection_state(step_outputs))
+
     if state is None:
       # Create an arbitrary state to indicate it's not the first step in the
       # following calls to this function.
       state = True
+
     return state
 
   def reduce_aggregated_logs(self, aggregated_logs, global_step=None):
@@ -397,4 +461,12 @@ class RetinaNetTask(base_task.Task):
       logs.update(self.coco_metric.result())
     if self._task_config.use_wod_metrics:
       logs.update(self.wod_metric.result())
+
+    # Add visualization for summary.
+    if isinstance(aggregated_logs, dict) and 'image' in aggregated_logs:
+      validation_outputs = visualization_utils.visualize_outputs(
+          logs=aggregated_logs, task_config=self.task_config
+      )
+      logs.update(validation_outputs)
+
     return logs

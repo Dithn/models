@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 import dataclasses
 from typing import Optional, Tuple
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import config_definitions as cfg
 from official.core import input_reader
@@ -145,7 +145,7 @@ class COCODataLoader():
         self._params.global_batch_size
     ) if input_context else self._params.global_batch_size
     dataset = dataset.batch(
-        per_replica_batch_size, drop_remainder=self._params.is_training)
+        per_replica_batch_size, drop_remainder=self._params.drop_remainder)
     return dataset
 
   def load(self, input_context: Optional[tf.distribute.InputContext] = None):

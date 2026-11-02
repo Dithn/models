@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import numpy as np
 import orbit
 from scipy import stats
 from sklearn import metrics as sklearn_metrics
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import base_task
 from official.core import config_definitions as cfg
@@ -34,7 +34,7 @@ from official.nlp.modeling import models
 from official.nlp.tasks import utils
 
 METRIC_TYPES = frozenset(
-    ['accuracy', 'matthews_corrcoef', 'pearson_spearman_corr'])
+    ['accuracy', 'f1', 'matthews_corrcoef', 'pearson_spearman_corr'])
 
 
 @dataclasses.dataclass
@@ -42,7 +42,7 @@ class ModelConfig(base_config.Config):
   """A classifier/regressor configuration."""
   num_classes: int = 0
   use_encoder_pooler: bool = False
-  encoder: encoders.EncoderConfig = encoders.EncoderConfig()
+  encoder: encoders.EncoderConfig = dataclasses.field(default_factory=encoders.EncoderConfig)
 
 
 @dataclasses.dataclass
@@ -55,9 +55,9 @@ class SentencePredictionConfig(cfg.TaskConfig):
   hub_module_url: str = ''
   metric_type: str = 'accuracy'
   # Defines the concrete model config at instantiation time.
-  model: ModelConfig = ModelConfig()
-  train_data: cfg.DataConfig = cfg.DataConfig()
-  validation_data: cfg.DataConfig = cfg.DataConfig()
+  model: ModelConfig = dataclasses.field(default_factory=ModelConfig)
+  train_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
+  validation_data: cfg.DataConfig = dataclasses.field(default_factory=cfg.DataConfig)
 
 
 @task_factory.register_task_cls(SentencePredictionConfig)
@@ -88,22 +88,25 @@ class SentencePredictionTask(base_task.Task):
       return models.XLNetClassifier(
           network=encoder_network,
           num_classes=self.task_config.model.num_classes,
-          initializer=tf.keras.initializers.RandomNormal(
+          initializer=tf_keras.initializers.RandomNormal(
               stddev=encoder_cfg.initializer_range))
     else:
       return models.BertClassifier(
           network=encoder_network,
           num_classes=self.task_config.model.num_classes,
-          initializer=tf.keras.initializers.TruncatedNormal(
+          initializer=tf_keras.initializers.TruncatedNormal(
               stddev=encoder_cfg.initializer_range),
           use_encoder_pooler=self.task_config.model.use_encoder_pooler)
 
   def build_losses(self, labels, model_outputs, aux_losses=None) -> tf.Tensor:
     label_ids = labels[self.label_field]
     if self.task_config.model.num_classes == 1:
-      loss = tf.keras.losses.mean_squared_error(label_ids, model_outputs)
+      # Reshape to avoid silent broadcasting bugs in Keras.
+      loss = tf_keras.losses.mean_squared_error(
+          tf.reshape(label_ids, [-1]), tf.reshape(model_outputs, [-1])
+      )
     else:
-      loss = tf.keras.losses.sparse_categorical_crossentropy(
+      loss = tf_keras.losses.sparse_categorical_crossentropy(
           label_ids, tf.cast(model_outputs, tf.float32), from_logits=True)
 
     if aux_losses:
@@ -139,15 +142,15 @@ class SentencePredictionTask(base_task.Task):
   def build_metrics(self, training=None):
     del training
     if self.task_config.model.num_classes == 1:
-      metrics = [tf.keras.metrics.MeanSquaredError()]
+      metrics = [tf_keras.metrics.MeanSquaredError()]
     elif self.task_config.model.num_classes == 2:
       metrics = [
-          tf.keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
-          tf.keras.metrics.AUC(name='auc', curve='PR'),
+          tf_keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
+          tf_keras.metrics.AUC(name='auc', curve='PR'),
       ]
     else:
       metrics = [
-          tf.keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
+          tf_keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
       ]
     return metrics
 
@@ -164,15 +167,18 @@ class SentencePredictionTask(base_task.Task):
   def process_compiled_metrics(self, compiled_metrics, labels, model_outputs):
     compiled_metrics.update_state(labels[self.label_field], model_outputs)
 
-  def validation_step(self, inputs, model: tf.keras.Model, metrics=None):
-    if self.metric_type == 'accuracy':
-      return super(SentencePredictionTask,
-                   self).validation_step(inputs, model, metrics)
+  def validation_step(self, inputs, model: tf_keras.Model, metrics=None):
     features, labels = inputs, inputs
     outputs = self.inference_step(features, model)
     loss = self.build_losses(
         labels=labels, model_outputs=outputs, aux_losses=model.losses)
     logs = {self.loss: loss}
+    if metrics:
+      self.process_metrics(metrics, labels, outputs)
+    if model.compiled_metrics:
+      self.process_compiled_metrics(model.compiled_metrics, labels, outputs)
+      logs.update({m.name: m.result() for m in metrics or []})
+      logs.update({m.name: m.result() for m in model.metrics})
     if self.metric_type == 'matthews_corrcoef':
       logs.update({
           'sentence_prediction':  # Ensure one prediction along batch dimension.
@@ -180,7 +186,7 @@ class SentencePredictionTask(base_task.Task):
           'labels':
               labels[self.label_field],
       })
-    if self.metric_type == 'pearson_spearman_corr':
+    else:
       logs.update({
           'sentence_prediction': outputs,
           'labels': labels[self.label_field],
@@ -193,27 +199,29 @@ class SentencePredictionTask(base_task.Task):
     if state is None:
       state = {'sentence_prediction': [], 'labels': []}
     state['sentence_prediction'].append(
-        np.concatenate([v.numpy() for v in step_outputs['sentence_prediction']],
+        np.concatenate([v.numpy() for v in step_outputs['sentence_prediction']],  # pyrefly: ignore[unsupported-operation]
                        axis=0))
     state['labels'].append(
-        np.concatenate([v.numpy() for v in step_outputs['labels']], axis=0))
+        np.concatenate([v.numpy() for v in step_outputs['labels']], axis=0))  # pyrefly: ignore[unsupported-operation]
     return state
 
   def reduce_aggregated_logs(self, aggregated_logs, global_step=None):
     if self.metric_type == 'accuracy':
       return None
+
+    preds = np.concatenate(aggregated_logs['sentence_prediction'], axis=0)
+    labels = np.concatenate(aggregated_logs['labels'], axis=0)
+    if self.metric_type == 'f1':
+      preds = np.argmax(preds, axis=1)
+      return {self.metric_type: sklearn_metrics.f1_score(labels, preds)}
     elif self.metric_type == 'matthews_corrcoef':
-      preds = np.concatenate(aggregated_logs['sentence_prediction'], axis=0)
       preds = np.reshape(preds, -1)
-      labels = np.concatenate(aggregated_logs['labels'], axis=0)
       labels = np.reshape(labels, -1)
       return {
           self.metric_type: sklearn_metrics.matthews_corrcoef(preds, labels)
       }
     elif self.metric_type == 'pearson_spearman_corr':
-      preds = np.concatenate(aggregated_logs['sentence_prediction'], axis=0)
       preds = np.reshape(preds, -1)
-      labels = np.concatenate(aggregated_logs['labels'], axis=0)
       labels = np.reshape(labels, -1)
       pearson_corr = stats.pearsonr(preds, labels)[0]
       spearman_corr = stats.spearmanr(preds, labels)[0]
@@ -249,7 +257,7 @@ class SentencePredictionTask(base_task.Task):
 
 def predict(task: SentencePredictionTask,
             params: cfg.DataConfig,
-            model: tf.keras.Model,
+            model: tf_keras.Model,
             params_aug: Optional[cfg.DataConfig] = None,
             test_time_aug_wgt: float = 0.3) -> List[Union[int, float]]:
   """Predicts on the input data.

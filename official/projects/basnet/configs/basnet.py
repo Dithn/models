@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from official.core import config_definitions as cfg
 from official.core import exp_factory
 from official.modeling import hyperparams
 from official.modeling import optimization
-from official.vision.beta.configs import common
+from official.vision.configs import common
 
 
 @dataclasses.dataclass
@@ -47,7 +47,9 @@ class BASNetModel(hyperparams.Config):
   """BASNet model config."""
   input_size: List[int] = dataclasses.field(default_factory=list)
   use_bias: bool = False
-  norm_activation: common.NormActivation = common.NormActivation()
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=common.NormActivation
+  )
 
 
 @dataclasses.dataclass
@@ -61,10 +63,14 @@ class Losses(hyperparams.Config):
 @dataclasses.dataclass
 class BASNetTask(cfg.TaskConfig):
   """The model config."""
-  model: BASNetModel = BASNetModel()
-  train_data: DataConfig = DataConfig(is_training=True)
-  validation_data: DataConfig = DataConfig(is_training=False)
-  losses: Losses = Losses()
+  model: BASNetModel = dataclasses.field(default_factory=BASNetModel)
+  train_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=True)
+  )
+  validation_data: DataConfig = dataclasses.field(
+      default_factory=lambda: DataConfig(is_training=False)
+  )
+  losses: Losses = dataclasses.field(default_factory=Losses)
   gradient_clip_norm: float = 0.0
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: Union[
@@ -99,7 +105,7 @@ def basnet_duts() -> cfg.ExperimentConfig:
   config = cfg.ExperimentConfig(
       task=BASNetTask(
           model=BASNetModel(
-              input_size=[None, None, 3],
+              input_size=[None, None, 3],  # pyrefly: ignore[bad-argument-type]
               use_bias=True,
               norm_activation=common.NormActivation(
                   activation='relu',

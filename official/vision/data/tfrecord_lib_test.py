@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ import os
 
 from absl import flags
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
+from official.vision.data import create_coco_tf_record as create_coco_tf_record_lib
 from official.vision.data import tfrecord_lib
 
 
@@ -47,7 +48,7 @@ class TfrecordLibTest(parameterized.TestCase):
     path = os.path.join(FLAGS.test_tmpdir, 'train')
 
     tfrecord_lib.write_tf_record_dataset(
-        path, data, process_sample, 3, use_multiprocessing=False)
+        path, data, process_sample, 3, multiple_processes=0)
     tfrecord_files = tf.io.gfile.glob(path + '*')
 
     self.assertLen(tfrecord_files, 3)
@@ -87,6 +88,89 @@ class TfrecordLibTest(parameterized.TestCase):
 
     proto = tfrecord_lib.convert_to_feature([b'123', b'456'])
     self.assertSequenceAlmostEqual(proto.bytes_list.value, [b'123', b'456'])
+
+  def test_obj_annotation_tf_example(self):
+    images = [
+        {
+            'id': 0,
+            'file_name': 'example1.jpg',
+            'height': 512,
+            'width': 512,
+        },
+        {
+            'id': 1,
+            'file_name': 'example2.jpg',
+            'height': 512,
+            'width': 512,
+        },
+    ]
+    img_to_obj_annotation = {
+        0: [{
+            'id': 0,
+            'image_id': 0,
+            'category_id': 1,
+            'bbox': [3, 1, 511, 510],
+            'area': 260610.00,
+            'segmentation': [],
+            'iscrowd': 0,
+        }],
+        1: [{
+            'id': 1,
+            'image_id': 1,
+            'category_id': 1,
+            'bbox': [1, 1, 100, 150],
+            'area': 15000.00,
+            'segmentation': [],
+            'iscrowd': 0,
+        }],
+    }
+    id_to_name_map = {
+        0: 'Super-Class',
+        1: 'Class-1',
+    }
+
+    temp_dir = FLAGS.test_tmpdir
+    image_dir = os.path.join(temp_dir, 'data')
+    if not os.path.exists(image_dir):
+      os.mkdir(image_dir)
+    for image in images:
+      image_path = os.path.join(image_dir, image['file_name'])
+      tf_keras.utils.save_img(
+          image_path,
+          tf.ones(shape=(image['height'], image['width'], 3)).numpy(),
+      )
+
+    output_path = os.path.join(image_dir, 'train')
+    coco_annotations_iter = create_coco_tf_record_lib.generate_annotations(
+        images=images,
+        image_dirs=[image_dir],
+        panoptic_masks_dir=None,
+        img_to_obj_annotation=img_to_obj_annotation,
+        img_to_caption_annotation=None,
+        img_to_panoptic_annotation=None,
+        is_category_thing=None,
+        id_to_name_map=id_to_name_map,
+        include_panoptic_masks=False,
+        include_masks=False,
+    )
+
+    tfrecord_lib.write_tf_record_dataset(
+        output_path,
+        coco_annotations_iter,
+        create_coco_tf_record_lib.create_tf_example,
+        1,
+        multiple_processes=0,
+    )
+    tfrecord_files = tf.io.gfile.glob(output_path + '*')
+
+    self.assertLen(tfrecord_files, 1)
+
+    ds = tf.data.TFRecordDataset(tfrecord_files)
+    assertion_count = 0
+    for _ in ds:
+      assertion_count += 1
+
+    self.assertEqual(assertion_count, 2)
 
 
 if __name__ == '__main__':

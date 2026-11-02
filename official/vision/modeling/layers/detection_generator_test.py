@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,13 @@
 # limitations under the License.
 
 """Tests for detection_generator.py."""
-# Import libraries
+from unittest import mock
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
+from official.vision.configs import common
 from official.vision.modeling.layers import detection_generator
 from official.vision.ops import anchor
 
@@ -46,8 +47,10 @@ class DetectionGeneratorTest(
   @parameterized.product(
       nms_version=['batched', 'v1', 'v2'],
       use_cpu_nms=[True, False],
-      soft_nms_sigma=[None, 0.1])
-  def testDetectionsOutputShape(self, nms_version, use_cpu_nms, soft_nms_sigma):
+      soft_nms_sigma=[None, 0.1],
+      use_sigmoid_probability=[True, False])
+  def testDetectionsOutputShape(self, nms_version, use_cpu_nms, soft_nms_sigma,
+                                use_sigmoid_probability):
     max_num_detections = 10
     num_classes = 4
     pre_nms_top_k = 5000
@@ -62,6 +65,7 @@ class DetectionGeneratorTest(
         'nms_version': nms_version,
         'use_cpu_nms': use_cpu_nms,
         'soft_nms_sigma': soft_nms_sigma,
+        'use_sigmoid_probability': use_sigmoid_probability,
     }
     generator = detection_generator.DetectionGenerator(**kwargs)
 
@@ -103,6 +107,7 @@ class DetectionGeneratorTest(
         'nms_version': 'v2',
         'use_cpu_nms': False,
         'soft_nms_sigma': None,
+        'use_sigmoid_probability': False,
     }
     generator = detection_generator.DetectionGenerator(**kwargs)
 
@@ -120,18 +125,28 @@ class MultilevelDetectionGeneratorTest(
     parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
-      ('batched', False, True, None, None),
-      ('batched', False, False, None, None),
-      ('v2', False, True, None, None),
-      ('v2', False, False, None, None),
-      ('v1', True, True, 0.0, None),
-      ('v1', True, False, 0.1, None),
-      ('v1', True, False, None, None),
-      ('tflite', False, False, None, True),
-      ('tflite', False, False, None, False),
+      ('batched', False, True, None, None, None),
+      ('batched', False, False, None, None, None),
+      ('v3', False, True, None, None, None),
+      ('v3', False, False, None, None, None),
+      ('v2', False, True, None, None, None),
+      ('v2', False, False, None, None, None),
+      ('v2', False, False, None, None, True),
+      ('v1', True, True, 0.0, None, None),
+      ('v1', True, False, 0.1, None, None),
+      ('v1', True, False, None, None, None),
+      ('tflite', False, False, None, True, None),
+      ('tflite', False, False, None, False, None),
   )
-  def testDetectionsOutputShape(self, nms_version, has_att_heads, use_cpu_nms,
-                                soft_nms_sigma, use_regular_nms):
+  def testDetectionsOutputShape(
+      self,
+      nms_version,
+      has_att_heads,
+      use_cpu_nms,
+      soft_nms_sigma,
+      use_regular_nms,
+      use_class_agnostic_nms,
+  ):
     min_level = 4
     max_level = 6
     num_scales = 2
@@ -148,7 +163,9 @@ class MultilevelDetectionGeneratorTest(
         'max_classes_per_detection': 1,
         'use_regular_nms': use_regular_nms,
         'nms_score_threshold': 0.01,
-        'nms_iou_threshold': 0.5
+        'nms_iou_threshold': 0.5,
+        'input_image_size': [224, 224],
+        'normalize_anchor_coordinates': True,
     }
     kwargs = {
         'apply_nms': True,
@@ -159,7 +176,8 @@ class MultilevelDetectionGeneratorTest(
         'nms_version': nms_version,
         'use_cpu_nms': use_cpu_nms,
         'soft_nms_sigma': soft_nms_sigma,
-        'tflite_post_processing_config': tflite_post_processing_config
+        'tflite_post_processing_config': tflite_post_processing_config,
+        'use_class_agnostic_nms': use_class_agnostic_nms,
     }
 
     input_anchor = anchor.build_anchor_generator(min_level, max_level,
@@ -247,13 +265,178 @@ class MultilevelDetectionGeneratorTest(
           self.assertEqual(att.numpy().shape,
                            (batch_size, max_num_detections, 1))
 
+  def test_decode_multilevel_outputs_and_pre_nms_top_k(self):
+    named_params = {
+        'apply_nms': True,
+        'pre_nms_top_k': 5,
+        'pre_nms_score_threshold': 0.05,
+        'nms_iou_threshold': 0.5,
+        'max_num_detections': 2,
+        'nms_version': 'v3',
+        'use_cpu_nms': False,
+        'soft_nms_sigma': None,
+    }
+    generator = detection_generator.MultilevelDetectionGenerator(**named_params)
+    # 2 classes, 3 boxes per pixel, 2 levels '1': 2x2, '2':1x1
+    background = [1, 0, 0]
+    first = [0, 1, 0]
+    second = [0, 0, 1]
+    some = [0, 0.5, 0.5]
+    class_outputs = {
+        '1':
+            tf.constant([[[
+                first + background + first, first + background + second
+            ], [second + background + first, second + background + second]]],
+                        dtype=tf.float32),
+        '2':
+            tf.constant([[[background + some + background]]], dtype=tf.float32),
+    }
+    box_outputs = {
+        '1': tf.zeros(shape=[1, 2, 2, 12], dtype=tf.float32),
+        '2': tf.zeros(shape=[1, 1, 1, 12], dtype=tf.float32)
+    }
+    anchor_boxes = {
+        '1':
+            tf.random.uniform(
+                shape=[2, 2, 12], minval=1., maxval=99., dtype=tf.float32),
+        '2':
+            tf.random.uniform(
+                shape=[1, 1, 12], minval=1., maxval=99., dtype=tf.float32),
+    }
+    boxes, scores = generator._decode_multilevel_outputs_and_pre_nms_top_k(
+        box_outputs, class_outputs, anchor_boxes,
+        tf.constant([[100, 100]], dtype=tf.float32))
+    self.assertAllClose(
+        scores,
+        tf.sigmoid(
+            tf.constant([[[1, 1, 1, 1, 0.5], [1, 1, 1, 1, 0.5]]],
+                        dtype=tf.float32)))
+    self.assertAllClose(
+        tf.squeeze(boxes),
+        tf.stack([
+            # Where the first is + some as last
+            tf.stack([
+                anchor_boxes['1'][0, 0, 0:4], anchor_boxes['1'][0, 0, 8:12],
+                anchor_boxes['1'][0, 1, 0:4], anchor_boxes['1'][1, 0, 8:12],
+                anchor_boxes['2'][0, 0, 4:8]
+            ]),
+            # Where the second is + some as last
+            tf.stack([
+                anchor_boxes['1'][0, 1, 8:12], anchor_boxes['1'][1, 0, 0:4],
+                anchor_boxes['1'][1, 1, 0:4], anchor_boxes['1'][1, 1, 8:12],
+                anchor_boxes['2'][0, 0, 4:8]
+            ]),
+        ]))
+
+  def test_decode_multilevel_with_tflite_nms(self):
+    config = common.TFLitePostProcessingConfig().as_dict()
+    generator = detection_generator.MultilevelDetectionGenerator(
+        apply_nms=True,
+        nms_version='tflite',
+        box_coder_weights=[9, 8, 7, 6],
+        tflite_post_processing_config=config,
+    )
+    raw_scores = {
+        '4': tf.zeros(shape=[1, 8, 8, 3 * 2], dtype=tf.float32),
+        '5': tf.zeros(shape=[1, 4, 4, 3 * 2], dtype=tf.float32),
+    }
+    raw_boxes = {
+        '4': tf.zeros(shape=[1, 8, 8, 4 * 2], dtype=tf.float32),
+        '5': tf.zeros(shape=[1, 4, 4, 4 * 2], dtype=tf.float32),
+    }
+    anchor_boxes = {
+        '4': tf.zeros(shape=[1, 8, 8, 4 * 2], dtype=tf.float32),
+        '5': tf.zeros(shape=[1, 4, 4, 4 * 2], dtype=tf.float32),
+    }
+
+    expected_signature = (
+        'name: "TFLite_Detection_PostProcess" attr { key: "max_detections"'
+        ' value { i: 200 } } attr { key: "max_classes_per_detection" value { i:'
+        ' 5 } } attr { key: "detections_per_class" value { i: 5 } } attr { key:'
+        ' "use_regular_nms" value { b: false } } attr { key:'
+        ' "nms_score_threshold" value { f: 0.100000 } } attr { key:'
+        ' "nms_iou_threshold" value { f: 0.500000 } } attr { key: "y_scale"'
+        ' value { f: 9.000000 } } attr { key: "x_scale" value { f: 8.000000 } }'
+        ' attr { key: "h_scale" value { f: 7.000000 } } attr { key: "w_scale"'
+        ' value { f: 6.000000 } } attr { key: "num_classes" value { i: 3 } }'
+    )
+
+    with mock.patch.object(
+        tf, 'function', wraps=tf.function
+    ) as mock_tf_function:
+      test_output = generator(
+          raw_boxes=raw_boxes,
+          raw_scores=raw_scores,
+          anchor_boxes=anchor_boxes,
+          image_shape=tf.constant([], dtype=tf.int32),
+      )
+      mock_tf_function.assert_called_once_with(
+          experimental_implements=expected_signature
+      )
+
+    self.assertEqual(
+        test_output['num_detections'], tf.constant(0.0, dtype=tf.float32)
+    )
+    self.assertEqual(
+        test_output['detection_boxes'], tf.constant(0.0, dtype=tf.float32)
+    )
+    self.assertEqual(
+        test_output['detection_classes'], tf.constant(0.0, dtype=tf.float32)
+    )
+    self.assertEqual(
+        test_output['detection_scores'], tf.constant(0.0, dtype=tf.float32)
+    )
+
+  def test_decode_multilevel_tflite_nms_error_on_wrong_boxes_shape(self):
+    config = common.TFLitePostProcessingConfig().as_dict()
+    generator = detection_generator.MultilevelDetectionGenerator(
+        apply_nms=True,
+        nms_version='tflite',
+        tflite_post_processing_config=config,
+    )
+    raw_scores = {'4': tf.zeros(shape=[1, 4, 4, 3 * 2], dtype=tf.float32)}
+    raw_boxes = {'4': tf.zeros(shape=[1, 4, 4, 3], dtype=tf.float32)}
+    anchor_boxes = {'4': tf.zeros(shape=[1, 4, 4, 4 * 2], dtype=tf.float32)}
+    with self.assertRaisesRegex(
+        ValueError,
+        'The last dimension of predicted boxes should be divisible by 4.',
+    ):
+      generator(
+          raw_boxes=raw_boxes,
+          raw_scores=raw_scores,
+          anchor_boxes=anchor_boxes,
+          image_shape=tf.constant([], dtype=tf.int32),
+      )
+
+  def test_decode_multilevel_tflite_nms_error_on_wrong_scores_shape(self):
+    config = common.TFLitePostProcessingConfig().as_dict()
+    generator = detection_generator.MultilevelDetectionGenerator(
+        apply_nms=True,
+        nms_version='tflite',
+        tflite_post_processing_config=config,
+    )
+    raw_scores = {'4': tf.zeros(shape=[1, 4, 4, 7 * 3], dtype=tf.float32)}
+    raw_boxes = {'4': tf.zeros(shape=[1, 4, 4, 4 * 5], dtype=tf.float32)}
+    anchor_boxes = {'4': tf.zeros(shape=[1, 4, 4, 4 * 5], dtype=tf.float32)}
+    with self.assertRaisesRegex(
+        ValueError,
+        'The last dimension of predicted scores should be divisible by',
+    ):
+      generator(
+          raw_boxes=raw_boxes,
+          raw_scores=raw_scores,
+          anchor_boxes=anchor_boxes,
+          image_shape=tf.constant([], dtype=tf.int32),
+      )
+
   def test_serialize_deserialize(self):
     tflite_post_processing_config = {
         'max_detections': 100,
         'max_classes_per_detection': 1,
         'use_regular_nms': True,
         'nms_score_threshold': 0.01,
-        'nms_iou_threshold': 0.5
+        'nms_iou_threshold': 0.5,
+        'input_image_size': [224, 224],
     }
     kwargs = {
         'apply_nms': True,
@@ -264,7 +447,10 @@ class MultilevelDetectionGeneratorTest(
         'nms_version': 'v2',
         'use_cpu_nms': False,
         'soft_nms_sigma': None,
-        'tflite_post_processing_config': tflite_post_processing_config
+        'tflite_post_processing_config': tflite_post_processing_config,
+        'return_decoded': False,
+        'use_class_agnostic_nms': False,
+        'box_coder_weights': None,
     }
     generator = detection_generator.MultilevelDetectionGenerator(**kwargs)
 

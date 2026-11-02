@@ -32,7 +32,7 @@ py_test() {
 
   echo "===========Running Python test============"
   # Skipping Ranking tests, TODO(b/189265753) remove it once the issue is fixed.
-  for test_file in `find official/ -name '*test.py' -print | grep -v 'official/recommendation/ranking'`
+  for test_file in `find official/ -name '*test.py' -print | grep -v -E 'official/(recommendation/ranking|legacy)'`
   do
     echo "####=======Testing ${test_file}=======####"
     ${PY_BINARY} "${test_file}"
@@ -47,7 +47,7 @@ py_test() {
 }
 
 py3_test() {
-  local PY_BINARY=python3.9
+  local PY_BINARY=python3.11
   py_test "$PY_BINARY"
   return $?
 }

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Tests for retinanet."""
 # pylint: disable=unused-import
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official import vision
 from official.core import config_definitions as cfg
@@ -38,7 +38,7 @@ class RetinaNetConfigTest(tf.test.TestCase, parameterized.TestCase):
     self.assertIsInstance(config.task.train_data, exp_cfg.DataConfig)
     config.validate()
     config.task.train_data.is_training = None
-    with self.assertRaisesRegex(KeyError, 'Found inconsistncy between key'):
+    with self.assertRaisesRegex(KeyError, 'Found inconsistency between key'):
       config.validate()
 
 

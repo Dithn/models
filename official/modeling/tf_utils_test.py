@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Tests for tf_utils."""
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
@@ -26,7 +26,8 @@ def all_strategy_combinations():
   return combinations.combine(
       strategy=[
           strategy_combinations.cloud_tpu_strategy,
-          strategy_combinations.mirrored_strategy_with_two_gpus,
+          # TODO(b/285797201):disable multi-gpu tests due to hanging.
+          # strategy_combinations.mirrored_strategy_with_two_gpus,
       ],
       mode='eager',
   )
@@ -83,6 +84,24 @@ class TFUtilsTest(tf.test.TestCase, parameterized.TestCase):
     per_replica_gradients = strategy.run(function)
     for gradient in per_replica_gradients.values:
       self.assertAllClose(gradient, num_cores * tf.ones(shape))
+
+  @parameterized.parameters(('relu', True), ('relu', False),
+                            ('leaky_relu', False), ('leaky_relu', True),
+                            ('mish', True), ('mish', False), ('gelu', True))
+  def test_get_activations(self, name, use_keras_layer):
+    fn = tf_utils.get_activation(name, use_keras_layer)
+    self.assertIsNotNone(fn)
+
+  @combinations.generate(all_strategy_combinations())
+  def test_get_leaky_relu_layer(self, strategy):
+    @tf.function
+    def forward(x):
+      fn = tf_utils.get_activation(
+          'leaky_relu', use_keras_layer=True, alpha=0.1)
+      return strategy.run(fn, args=(x,)).values[0]
+
+    got = forward(tf.constant([-1]))
+    self.assertAllClose(got, tf.constant([-0.1]))
 
 
 if __name__ == '__main__':

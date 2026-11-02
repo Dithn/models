@@ -1,4 +1,4 @@
-# Copyright 2022 The Orbit Authors. All Rights Reserved.
+# Copyright 2026 The Orbit Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,14 +18,14 @@ import os
 
 from orbit import actions
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class NewBestMetricTest(tf.test.TestCase):
 
   def test_new_best_metric_higher_is_better(self):
     new_best_metric = actions.NewBestMetric(
-        lambda x: x['value'], higher_is_better=True)
+        lambda x: x['value'], higher_is_better=True)  # pyrefly: ignore[bad-argument-type]
     self.assertTrue(new_best_metric.test({'value': 0.0}))
     self.assertTrue(new_best_metric.commit({'value': 0.0}))
     self.assertFalse(new_best_metric.test({'value': 0.0}))
@@ -61,7 +61,7 @@ class NewBestMetricTest(tf.test.TestCase):
     tempfile = self.create_tempfile().full_path
     value = {'a': 1, 'b': 2}
     persisted_value = actions.JSONPersistedValue(value, tempfile)
-    # The inital value is used since tempfile is empty.
+    # The initial value is used since tempfile is empty.
     self.assertEqual(persisted_value.read(), value)
     persisted_value = actions.JSONPersistedValue('ignored', tempfile)
     # Initial value of 'ignored' is ignored, since there's a value in tempfile.

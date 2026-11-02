@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 from typing import Optional
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import dataset_fn
 from official.core import base_task
@@ -27,13 +27,13 @@ from official.projects.basnet.evaluation import metrics as basnet_metrics
 from official.projects.basnet.losses import basnet_losses
 from official.projects.basnet.modeling import basnet_model
 from official.projects.basnet.modeling import refunet
-from official.vision.beta.dataloaders import segmentation_input
+from official.vision.dataloaders import segmentation_input
 
 
 def build_basnet_model(
-    input_specs: tf.keras.layers.InputSpec,
+    input_specs: tf_keras.layers.InputSpec,
     model_config: exp_cfg.BASNetModel,
-    l2_regularizer: tf.keras.regularizers.Regularizer = None):
+    l2_regularizer: Optional[tf_keras.regularizers.Regularizer] = None):
   """Builds BASNet model."""
   norm_activation_config = model_config.norm_activation
   backbone = basnet_model.BASNetEncoder(
@@ -71,14 +71,14 @@ class BASNetTask(base_task.Task):
 
   def build_model(self):
     """Builds basnet model."""
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None] + self.task_config.model.input_size)
 
     l2_weight_decay = self.task_config.losses.l2_weight_decay
     # Divide weight decay by 2.0 to match the implementation of tf.nn.l2_loss.
     # (https://www.tensorflow.org/api_docs/python/tf/keras/regularizers/l2)
     # (https://www.tensorflow.org/api_docs/python/tf/nn/l2_loss)
-    l2_regularizer = (tf.keras.regularizers.l2(
+    l2_regularizer = (tf_keras.regularizers.l2(
         l2_weight_decay / 2.0) if l2_weight_decay else None)
 
     model = build_basnet_model(
@@ -87,7 +87,7 @@ class BASNetTask(base_task.Task):
         l2_regularizer=l2_regularizer)
     return model
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """Loads pretrained checkpoint."""
     if not self.task_config.init_checkpoint:
       return
@@ -203,7 +203,7 @@ class BASNetTask(base_task.Task):
 
       # For mixed_precision policy, when LossScaleOptimizer is used, loss is
       # scaled for numerical stability.
-      if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+      if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
@@ -211,7 +211,7 @@ class BASNetTask(base_task.Task):
 
     # Scales back gradient before apply_gradients when LossScaleOptimizer is
     # used.
-    if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+    if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
 
     # Apply gradient clipping.
@@ -261,14 +261,14 @@ class BASNetTask(base_task.Task):
       self.relaxf_metric.reset_states()
       state = self.mae_metric
     self.mae_metric.update_state(
-        step_outputs[self.mae_metric.name][0],
-        step_outputs[self.mae_metric.name][1])
+        step_outputs[self.mae_metric.name][0],  # pyrefly: ignore[unsupported-operation]
+        step_outputs[self.mae_metric.name][1])  # pyrefly: ignore[unsupported-operation]
     self.maxf_metric.update_state(
-        step_outputs[self.maxf_metric.name][0],
-        step_outputs[self.maxf_metric.name][1])
+        step_outputs[self.maxf_metric.name][0],  # pyrefly: ignore[unsupported-operation]
+        step_outputs[self.maxf_metric.name][1])  # pyrefly: ignore[unsupported-operation]
     self.relaxf_metric.update_state(
-        step_outputs[self.relaxf_metric.name][0],
-        step_outputs[self.relaxf_metric.name][1])
+        step_outputs[self.relaxf_metric.name][0],  # pyrefly: ignore[unsupported-operation]
+        step_outputs[self.relaxf_metric.name][1])  # pyrefly: ignore[unsupported-operation]
     return state
 
   def reduce_aggregated_logs(self, aggregated_logs, global_step=None):

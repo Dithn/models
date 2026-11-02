@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from typing import Deque, List, NamedTuple, Optional, Sequence
 
 from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class RecomputeContext(
@@ -138,7 +138,7 @@ def _force_data_dependency(
   if not dtype.is_floating:
     raise ValueError('_force_data_dependency only supports floating dtypes.')
   zero = np.finfo(dtype.as_numpy_dtype).tiny * first_compute_sum
-  return [
+  return [  # pyrefly: ignore[bad-return]
       x + tf.cast(zero, x.dtype) if x is not None else None
       for x in then_compute
   ]

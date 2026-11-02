@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from absl import logging
 
 import gin
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import base_trainer
 from official.core import config_definitions
@@ -39,16 +39,16 @@ class PruningAction:
   def __init__(
       self,
       export_dir: str,
-      model: tf.keras.Model,
-      optimizer: tf.keras.optimizers.Optimizer,
+      model: tf_keras.Model,
+      optimizer: tf_keras.optimizers.Optimizer,
   ):
     """Initializes the instance.
 
     Args:
       export_dir: `str` for the export directory of the pruning summaries.
-      model: `tf.keras.Model` model instance used for training. This will be
+      model: `tf_keras.Model` model instance used for training. This will be
         used to assign a pruning step to each prunable weight.
-      optimizer: `tf.keras.optimizers.Optimizer` optimizer instance used for
+      optimizer: `tf_keras.optimizers.Optimizer` optimizer instance used for
         training. This will be used to find the current training steps.
     """
     # TODO(b/221490190): Avoid local import when the bug is fixed.
@@ -84,14 +84,14 @@ class EMACheckpointing:
 
   def __init__(self,
                export_dir: str,
-               optimizer: tf.keras.optimizers.Optimizer,
+               optimizer: tf_keras.optimizers.Optimizer,
                checkpoint: tf.train.Checkpoint,
                max_to_keep: int = 1):
     """Initializes the instance.
 
     Args:
       export_dir: `str` for the export directory of the EMA average weights.
-      optimizer: `tf.keras.optimizers.Optimizer` optimizer instance used for
+      optimizer: `tf_keras.optimizers.Optimizer` optimizer instance used for
         training. This will be used to swap the model weights with the average
         weigths.
       checkpoint: `tf.train.Checkpoint` instance.
@@ -165,7 +165,7 @@ class RecoveryCondition:
             % self.recover_counter)
       return True
     if (self.global_step >= self.recovery_begin_steps and
-        loss_value > self.loss_upper_bound):
+        loss_value > self.loss_upper_bound):  # pyrefly: ignore[unsupported-operation]
       self.recover_counter += 1
       if self.recover_counter > self.recovery_max_trials:
         raise RuntimeError(
@@ -221,4 +221,16 @@ def get_train_actions(
         action=RecoveryAction(checkpoint_manager),
     )
     train_actions.append(recover_action)
+
+  if (
+      params.trainer.preemption_on_demand_checkpoint
+      and trainer.strategy.cluster_resolver
+  ):
+    on_demand_checkpoint_action = orbit.actions.SaveCheckpointIfPreempted(
+        trainer.strategy.cluster_resolver,
+        checkpoint_manager,
+        trainer.global_step,
+        keep_running_after_save=True,
+    )
+    train_actions.append(on_demand_checkpoint_action)
   return train_actions

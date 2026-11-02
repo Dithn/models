@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import sys
 import unicodedata
 
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class UnicodeRegex(object):
@@ -149,15 +149,15 @@ def compute_bleu(reference_corpus,
 
   for i in range(0, max_order):
     if possible_matches_by_order[i] > 0:
-      precisions[i] = float(matches_by_order[i]) / possible_matches_by_order[i]
+      precisions[i] = float(matches_by_order[i]) / possible_matches_by_order[i]  # pyrefly: ignore[unsupported-operation]
       if matches_by_order[i] > 0:
-        precisions[i] = float(
+        precisions[i] = float(  # pyrefly: ignore[unsupported-operation]
             matches_by_order[i]) / possible_matches_by_order[i]
       else:
         smooth *= 2
-        precisions[i] = 1.0 / (smooth * possible_matches_by_order[i])
+        precisions[i] = 1.0 / (smooth * possible_matches_by_order[i])  # pyrefly: ignore[unsupported-operation]
     else:
-      precisions[i] = 0.0
+      precisions[i] = 0.0  # pyrefly: ignore[unsupported-operation]
 
   if max(precisions) > 0:
     p_log_sum = sum(math.log(p) for p in precisions if p)

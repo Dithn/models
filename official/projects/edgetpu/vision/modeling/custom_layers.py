@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,22 +14,25 @@
 
 """Customized keras layers used in the EdgeTPU models."""
 
+from collections.abc import MutableMapping
 import inspect
-from typing import Any, MutableMapping, Optional, Union, Tuple
-import tensorflow as tf
+from typing import Any, Optional, Union
+import tensorflow as tf, tf_keras
+
+from official.modeling import tf_utils
 
 
-class GroupConv2D(tf.keras.layers.Conv2D):
+class GroupConv2D(tf_keras.layers.Conv2D):
   """2D group convolution as a Keras Layer."""
 
   def __init__(self,
                filters: int,
-               kernel_size: Union[int, Tuple[int, int]],
+               kernel_size: Union[int, tuple[int, int]],
                groups: int,
-               strides: Tuple[int, int] = (1, 1),
+               strides: tuple[int, int] = (1, 1),
                padding: str = 'valid',
                data_format: str = 'channels_last',
-               dilation_rate: Tuple[int, int] = (1, 1),
+               dilation_rate: tuple[int, int] = (1, 1),
                activation: Any = None,
                use_bias: bool = True,
                kernel_initializer: Any = 'glorot_uniform',
@@ -39,10 +42,10 @@ class GroupConv2D(tf.keras.layers.Conv2D):
                activity_regularizer: Any = None,
                kernel_constraint: Any = None,
                bias_constraint: Any = None,
-               batch_norm_layer: Optional[tf.keras.layers.Layer] = None,
+               batch_norm_layer: Optional[tf_keras.layers.Layer] = None,
                bn_epsilon: float = 1e-3,
                bn_momentum: float = 0.99,
-               **kwargs: Any) -> tf.keras.layers.Layer:
+               **kwargs: Any) -> tf_keras.layers.Layer:  # pyrefly: ignore[bad-return]
     """Creates a 2D group convolution keras layer.
 
     Args:
@@ -81,7 +84,7 @@ class GroupConv2D(tf.keras.layers.Conv2D):
       bias_constraint: Constraint function applied to the bias vector ( see
         `keras.constraints`).
       batch_norm_layer: The batch normalization layer to use. This is typically
-        tf.keras.layer.BatchNormalization or a derived class.
+        tf_keras.layer.BatchNormalization or a derived class.
       bn_epsilon: Batch normalization epsilon.
       bn_momentum: Momentum used for moving average in batch normalization.
       **kwargs: Additional keyword arguments.
@@ -102,9 +105,9 @@ class GroupConv2D(tf.keras.layers.Conv2D):
       ValueError: if `batch_norm_layer` is not a callable when provided.
       ValueError: when both `strides` > 1 and `dilation_rate` > 1.
     """
-    if groups <= 1 or groups >= filters:
-      raise ValueError('Number of groups should be greater than 1 and less '
-                       'than the output filters.')
+    if groups <= 1 or groups > filters:
+      raise ValueError(f'Number of groups {groups} should be greater than 1 and'
+                       f' less or equal than the output filters {filters}.')
     self._groups = groups
     if data_format != 'channels_last':
       raise ValueError(
@@ -123,8 +126,8 @@ class GroupConv2D(tf.keras.layers.Conv2D):
     self.batch_norm_layer = []
     if self.use_batch_norm:
       self.batch_norm_layer = [
-          batch_norm_layer(
-              axis=-1, momentum=self.bn_momentum, epsilon=self.bn_epsilon)
+          batch_norm_layer(  # pyrefly: ignore[not-callable]
+              axis=-1, momentum=self.bn_momentum, epsilon=self.bn_epsilon)  # pyrefly: ignore[unexpected-keyword]
           for i in range(self._groups)
       ]
 
@@ -145,9 +148,9 @@ class GroupConv2D(tf.keras.layers.Conv2D):
         kernel_constraint=kernel_constraint,
         bias_constraint=bias_constraint,
         groups=1,
-        **kwargs)  # pytype: disable=bad-return-type  # typed-keras
+        **kwargs)
 
-  def build(self, input_shape: Tuple[int, ...]) -> None:
+  def build(self, input_shape: tuple[int, ...]) -> None:
     """Builds GroupConv2D layer as a collection of smaller Conv2D layers."""
     input_shape = tf.TensorShape(input_shape)
     input_channel = self._get_input_channel(input_shape)
@@ -157,7 +160,7 @@ class GroupConv2D(tf.keras.layers.Conv2D):
           f'by number of groups: {self._groups}.')
 
     self.group_input_channel = int(input_channel / self._groups)
-    self.group_output_channel = int(self.filters / self._groups)
+    self.group_output_channel = int(self.filters / self._groups)  # pyrefly: ignore[unsupported-operation]
     self.group_kernel_shape = self.kernel_size + (self.group_input_channel,
                                                   self.group_output_channel)
 
@@ -168,7 +171,7 @@ class GroupConv2D(tf.keras.layers.Conv2D):
           self.add_weight(
               name='kernel_{}'.format(g),
               shape=self.group_kernel_shape,
-              initializer=self.kernel_initializer,
+              initializer=tf_utils.clone_initializer(self.kernel_initializer),
               regularizer=self.kernel_regularizer,
               constraint=self.kernel_constraint,
               trainable=True,
@@ -178,13 +181,13 @@ class GroupConv2D(tf.keras.layers.Conv2D):
             self.add_weight(
                 name='bias_{}'.format(g),
                 shape=(self.group_output_channel,),
-                initializer=self.bias_initializer,
+                initializer=tf_utils.clone_initializer(self.bias_initializer),
                 regularizer=self.bias_regularizer,
                 constraint=self.bias_constraint,
                 trainable=True,
                 dtype=self.dtype))
     channel_axis = self._get_channel_axis()
-    self.input_spec = tf.keras.layers.InputSpec(
+    self.input_spec = tf_keras.layers.InputSpec(
         ndim=self.rank + 2, axes={channel_axis: input_channel})
 
     self._build_conv_op_data_shape = input_shape[-(self.rank + 1):]
@@ -216,7 +219,7 @@ class GroupConv2D(tf.keras.layers.Conv2D):
 
       if self.use_bias:
         output_slice = tf.nn.bias_add(
-            output_slice, self.bias[i], data_format='NHWC')
+            output_slice, self.bias[i], data_format='NHWC')  # pyrefly: ignore[unsupported-operation]
 
       # Apply batch norm after bias addition.
       if self.use_batch_norm:
@@ -264,19 +267,19 @@ class GroupConv2D(tf.keras.layers.Conv2D):
     return cls(**config)
 
 
-class GroupConv2DKerasModel(tf.keras.Model):
+class GroupConv2DKerasModel(tf_keras.Model):
   """2D group convolution as a keras model."""
 
   def __init__(self,
                filters: int,
-               kernel_size: Tuple[int, int],
+               kernel_size: tuple[int, int],
                groups: int,
-               batch_norm_layer: Optional[tf.keras.layers.Layer] = None,
+               batch_norm_layer: Optional[tf_keras.layers.Layer] = None,
                bn_epsilon: float = 1e-3,
                bn_momentum: float = 0.99,
                data_format: str = 'channels_last',
                padding: str = 'valid',
-               **kwargs: Any) -> tf.keras.Model:
+               **kwargs: Any) -> tf_keras.Model:  # pyrefly: ignore[bad-return]
     """Creates a 2D group convolution layer as a keras model.
 
     Args:
@@ -287,7 +290,7 @@ class GroupConv2DKerasModel(tf.keras.Model):
         specify the same value for all spatial dimensions.
       groups: The number of input/output channel groups.
       batch_norm_layer: The batch normalization layer to use. This is typically
-        tf.keras.layer.BatchNormalization or a derived class.
+        tf_keras.layer.BatchNormalization or a derived class.
       bn_epsilon: Batch normalization epsilon.
       bn_momentum: Momentum used for moving average in batch normalization.
       data_format: The ordering of the dimensions in the inputs. `channels_last`
@@ -319,7 +322,7 @@ class GroupConv2DKerasModel(tf.keras.Model):
       self.use_batch_norm = True
 
     if 'activation' in kwargs.keys():
-      self.activation = tf.keras.activations.get(kwargs['activation'])
+      self.activation = tf_keras.activations.get(kwargs['activation'])
       kwargs.pop('activation')
     else:
       self.activation = None
@@ -335,15 +338,15 @@ class GroupConv2DKerasModel(tf.keras.Model):
     for _ in range(self._groups):
       # Override the activation so that batchnorm can be applied after the conv.
       self.conv_layers.append(
-          tf.keras.layers.Conv2D(per_conv_filter_size, kernel_size, **kwargs))
+          tf_keras.layers.Conv2D(per_conv_filter_size, kernel_size, **kwargs))
 
     if self.use_batch_norm:
       for _ in range(self._groups):
         self.bn_layers.append(
-            self.batch_norm_layer(
-                axis=-1, momentum=bn_momentum, epsilon=bn_epsilon))  # pytype: disable=bad-return-type  # typed-keras
+            self.batch_norm_layer(  # pyrefly: ignore[not-callable]
+                axis=-1, momentum=bn_momentum, epsilon=bn_epsilon))  # pyrefly: ignore[unexpected-keyword]
 
-  def call(self, inputs: Any) -> Any:
+  def call(self, inputs: Any) -> Any:  # pyrefly: ignore[bad-override]
     """Applies 2d group convolution on the inputs."""
     input_shape = inputs.get_shape().as_list()
     if input_shape[-1] % self._groups != 0:
@@ -356,7 +359,7 @@ class GroupConv2DKerasModel(tf.keras.Model):
       output_slice = self.conv_layers[g](input_slices[g])
       if self.use_batch_norm:
         output_slice = self.bn_layers[g](output_slice)
-      output_slice = self.activation(output_slice)
+      output_slice = self.activation(output_slice)  # pyrefly: ignore[not-callable]
       output_slices.append(output_slice)
 
     outputs = tf.concat(output_slices, axis=-1)
@@ -392,7 +395,7 @@ def argmax(input_tensor,
       which axis of the input Tensor to reduce across. For vectors, use axis =
       0.
     output_type: An optional tf.DType. Note that default is different from
-      tflite (int64) to make default behavior compatible with darwinn.
+      tflite (int64) to make default behavior compatible with Edge TPU.
     name: Optional name for operations.
     keepdims: If true, retains reduced dimensions with length 1.
     epsilon: Optional small number which is intended to be always below
@@ -443,14 +446,14 @@ def argmax(input_tensor,
           name=name))
 
 
-class ArgmaxKerasLayer(tf.keras.layers.Layer):
+class ArgmaxKerasLayer(tf_keras.layers.Layer):
   """Implements argmax as a keras model."""
 
   def __init__(self,
                axis=-1,
                name=None,
                output_type=tf.dtypes.int32,
-               **kwargs: Any) -> tf.keras.Model:
+               **kwargs: Any) -> tf_keras.Model:  # pyrefly: ignore[bad-return]
     """Implements argmax as a keras model.
 
     Args:
@@ -466,7 +469,7 @@ class ArgmaxKerasLayer(tf.keras.layers.Layer):
     """
     super().__init__(name=name, **kwargs)
     self.axis = axis
-    self.output_type = output_type  # pytype: disable=bad-return-type  # typed-keras
+    self.output_type = output_type
 
   def call(self, inputs: Any) -> Any:
     """Applies argmax on the inputs."""

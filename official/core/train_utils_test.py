@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@ import json
 import os
 import pprint
 
+from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
+import yaml
 
 from official.core import exp_factory
 from official.core import test_utils
@@ -47,7 +49,7 @@ def foo():
   return experiment_config
 
 
-class TrainUtilsTest(tf.test.TestCase):
+class TrainUtilsTest(tf.test.TestCase, parameterized.TestCase):
 
   def test_get_leaf_nested_dict(self):
     d = {'a': {'i': {'x': 5}}}
@@ -138,6 +140,87 @@ class TrainUtilsTest(tf.test.TestCase):
     self.assertEqual(params_from_obj.trainer.train_steps, 10)
     self.assertEqual(params_from_obj.trainer.validation_steps, 11)
 
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='strict_with_extra',
+          strict_override=True,
+          has_extra=True,
+          expect_error=True,
+      ),
+      dict(
+          testcase_name='non_strict_with_extra',
+          strict_override=False,
+          has_extra=True,
+          expect_error=False,
+      ),
+      dict(
+          testcase_name='strict_no_extra',
+          strict_override=True,
+          has_extra=False,
+          expect_error=False,
+      ),
+      dict(
+          testcase_name='non_strict_no_extra',
+          strict_override=False,
+          has_extra=False,
+          expect_error=False,
+      ),
+  )
+  def test_parse_configuration_strict_override_file(
+      self, strict_override, has_extra, expect_error
+  ):
+    tempdir = self.create_tempdir().full_path
+    config_path = os.path.join(tempdir, 'config.yaml')
+    override_config = {
+        'task': {
+            'model': {
+                'model_id': 'override',
+            },
+        },
+        'trainer': {
+            'train_steps': 500,
+        },
+    }
+    if has_extra:
+      override_config['task']['extra_key'] = 'extra_value'
+
+    with open(config_path, 'w') as f:
+      yaml.dump(override_config, f)
+
+    options = train_utils.ParseConfigOptions(
+        experiment='foo',
+        config_file=[config_path],
+        strict_override=strict_override,
+    )
+
+    if expect_error:
+      with self.assertRaises(KeyError):
+        train_utils.parse_configuration(options)
+    else:
+      params = train_utils.parse_configuration(options)
+      self.assertEqual(params.task.model.model_id, 'override')
+      self.assertEqual(params.trainer.train_steps, 500)
+      if has_extra:
+        self.assertTrue(hasattr(params.task, 'extra_key'))
+        self.assertEqual(params.task.extra_key, 'extra_value')
+      else:
+        self.assertFalse(hasattr(params.task, 'extra_key'))
+
+  def test_parse_configuration_strict_override_string(self):
+    # Test non-strict loading with params_override string
+    options_non_strict_override = train_utils.ParseConfigOptions(
+        experiment='foo',
+        config_file=[],
+        params_override='task.another_extra=test,trainer.train_steps=100',
+        strict_override=False,
+    )
+    params_override = train_utils.parse_configuration(
+        options_non_strict_override
+    )
+    self.assertEqual(params_override.trainer.train_steps, 100)
+    self.assertTrue(hasattr(params_override.task, 'another_extra'))
+    self.assertEqual(params_override.task.another_extra, 'test')
+
 
 class BestCheckpointExporterTest(tf.test.TestCase):
 
@@ -186,6 +269,23 @@ class BestCheckpointExporterTest(tf.test.TestCase):
     exporter = train_utils.BestCheckpointExporter(model_dir, metric_name,
                                                   'higher')
     exporter.export_best_eval_metric({'test_metric': {'metric_1': 5.0}}, 100)
+    with tf.io.gfile.GFile(os.path.join(model_dir, 'info.json'),
+                           'rb') as reader:
+      metric = json.loads(reader.read())
+      self.assertAllEqual(
+          metric,
+          {'test_metric': {'metric_1': 5.0}, 'best_ckpt_global_step': 100.0})
+
+  def test_export_best_eval_metric_skips_non_scalar_values(self):
+    model_dir = self.create_tempdir().full_path
+    metric_name = 'test_metric|metric_1'
+    exporter = train_utils.BestCheckpointExporter(model_dir, metric_name,
+                                                  'higher')
+    image = tf.zeros(shape=[16, 8, 1])
+    eval_logs = {'test_metric': {'metric_1': 5.0, 'image': image}}
+
+    exporter.export_best_eval_metric(eval_logs, 100)
+
     with tf.io.gfile.GFile(os.path.join(model_dir, 'info.json'),
                            'rb') as reader:
       metric = json.loads(reader.read())

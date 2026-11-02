@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for maskrcnn_model.py."""
 
 import os
-# Import libraries
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
@@ -43,9 +41,10 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
           include_mask=[True, False],
           use_separable_conv=[True, False],
           build_anchor_boxes=[True, False],
+          use_outer_boxes=[True, False],
           is_training=[True, False]))
   def test_build_model(self, include_mask, use_separable_conv,
-                       build_anchor_boxes, is_training):
+                       build_anchor_boxes, use_outer_boxes, is_training):
     num_classes = 3
     min_level = 3
     max_level = 7
@@ -120,6 +119,12 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
         [[[10, 10, 15, 15], [2.5, 2.5, 7.5, 7.5], [-1, -1, -1, -1]],
          [[100, 100, 150, 150], [-1, -1, -1, -1], [-1, -1, -1, -1]]],
         dtype=np.float32)
+    gt_outer_boxes = None
+    if use_outer_boxes:
+      gt_outer_boxes = np.array(
+          [[[11, 11, 16.5, 16.5], [2.75, 2.75, 8.25, 8.25], [-1, -1, -1, -1]],
+           [[110, 110, 165, 165], [-1, -1, -1, -1], [-1, -1, -1, -1]]],
+          dtype=np.float32)
     gt_classes = np.array([[2, 1, -1], [1, -1, -1]], dtype=np.int32)
     if include_mask:
       gt_masks = np.ones((2, 3, 100, 100))
@@ -134,6 +139,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
         gt_boxes,
         gt_classes,
         gt_masks,
+        gt_outer_boxes,
         training=is_training)
 
   @combinations.generate(
@@ -180,7 +186,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
         anchor_boxes = None
       num_anchors_per_location = len(aspect_ratios) * num_scales
 
-      input_specs = tf.keras.layers.InputSpec(shape=[None, None, None, 3])
+      input_specs = tf_keras.layers.InputSpec(shape=[None, None, None, 3])
       backbone = resnet.ResNet(model_id=50, input_specs=input_specs)
       decoder = fpn.FPN(
           min_level=min_level,
@@ -243,6 +249,10 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
           [[[10, 10, 15, 15], [2.5, 2.5, 7.5, 7.5], [-1, -1, -1, -1]],
            [[100, 100, 150, 150], [-1, -1, -1, -1], [-1, -1, -1, -1]]],
           dtype=np.float32)
+      gt_outer_boxes = np.array(
+          [[[11, 11, 16.5, 16.5], [2.75, 2.75, 8.25, 8.25], [-1, -1, -1, -1]],
+           [[110, 110, 165, 165], [-1, -1, -1, -1], [-1, -1, -1, -1]]],
+          dtype=np.float32)
       gt_classes = np.array([[2, 1, -1], [1, -1, -1]], dtype=np.int32)
       if include_mask:
         gt_masks = np.ones((2, 3, 100, 100))
@@ -256,6 +266,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
           gt_boxes,
           gt_classes,
           gt_masks,
+          gt_outer_boxes,
           training=training)
 
     self.assertIn('rpn_boxes', results)
@@ -280,7 +291,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
       (True,),
   )
   def test_serialize_deserialize(self, include_mask):
-    input_specs = tf.keras.layers.InputSpec(shape=[None, None, None, 3])
+    input_specs = tf_keras.layers.InputSpec(shape=[None, None, None, 3])
     backbone = resnet.ResNet(model_id=50, input_specs=input_specs)
     decoder = fpn.FPN(
         min_level=3, max_level=7, input_specs=backbone.output_specs)
@@ -332,7 +343,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
       (True,),
   )
   def test_checkpoint(self, include_mask):
-    input_specs = tf.keras.layers.InputSpec(shape=[None, None, None, 3])
+    input_specs = tf_keras.layers.InputSpec(shape=[None, None, None, 3])
     backbone = resnet.ResNet(model_id=50, input_specs=input_specs)
     decoder = fpn.FPN(
         min_level=3, max_level=7, input_specs=backbone.output_specs)

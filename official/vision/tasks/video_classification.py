@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 from typing import Any, Optional, List, Tuple
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.core import base_task
 from official.core import task_factory
 from official.modeling import tf_utils
@@ -24,6 +24,7 @@ from official.vision.configs import video_classification as exp_cfg
 from official.vision.dataloaders import input_reader_factory
 from official.vision.dataloaders import video_input
 from official.vision.modeling import factory_3d
+from official.vision.ops import augment
 
 
 @task_factory.register_task_cls(exp_cfg.VideoClassificationTask)
@@ -56,14 +57,14 @@ class VideoClassificationTask(base_task.Task):
   def build_model(self):
     """Builds video classification model."""
     common_input_shape = self._get_feature_shape()
-    input_specs = tf.keras.layers.InputSpec(shape=[None] + common_input_shape)
+    input_specs = tf_keras.layers.InputSpec(shape=[None] + common_input_shape)
     logging.info('Build model input %r', common_input_shape)
 
-    l2_weight_decay = self.task_config.losses.l2_weight_decay
+    l2_weight_decay = float(self.task_config.losses.l2_weight_decay)
     # Divide weight decay by 2.0 to match the implementation of tf.nn.l2_loss.
     # (https://www.tensorflow.org/api_docs/python/tf/keras/regularizers/l2)
     # (https://www.tensorflow.org/api_docs/python/tf/nn/l2_loss)
-    l2_regularizer = (tf.keras.regularizers.l2(
+    l2_regularizer = (tf_keras.regularizers.l2(
         l2_weight_decay / 2.0) if l2_weight_decay else None)
 
     model = factory_3d.build_model(
@@ -72,9 +73,13 @@ class VideoClassificationTask(base_task.Task):
         model_config=self.task_config.model,
         num_classes=self._get_num_classes(),
         l2_regularizer=l2_regularizer)
+
+    if self.task_config.freeze_backbone:
+      logging.info('Freezing model backbone.')
+      model.backbone.trainable = False
     return model
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """Loads pretrained checkpoint."""
     if not self.task_config.init_checkpoint:
       return
@@ -85,7 +90,7 @@ class VideoClassificationTask(base_task.Task):
 
     # Restoring checkpoint.
     if self.task_config.init_checkpoint_modules == 'all':
-      ckpt = tf.train.Checkpoint(**model.checkpoint_items)
+      ckpt = tf.train.Checkpoint(model=model)
       status = ckpt.read(ckpt_dir_or_file)
       status.expect_partial().assert_existing_objects_matched()
     elif self.task_config.init_checkpoint_modules == 'backbone':
@@ -128,6 +133,17 @@ class VideoClassificationTask(base_task.Task):
         image_key=params.image_field_key,
         label_key=params.label_field_key)
     postprocess_fn = video_input.PostBatchProcessor(params)
+    if params.mixup_and_cutmix is not None:
+      def mixup_and_cutmix(features, labels):
+        augmenter = augment.MixupAndCutmix(
+            mixup_alpha=params.mixup_and_cutmix.mixup_alpha,
+            cutmix_alpha=params.mixup_and_cutmix.cutmix_alpha,
+            prob=params.mixup_and_cutmix.prob,
+            label_smoothing=params.mixup_and_cutmix.label_smoothing,
+            num_classes=self._get_num_classes())
+        features['image'], labels = augmenter(features['image'], labels)
+        return features, labels
+      postprocess_fn = mixup_and_cutmix
 
     reader = input_reader_factory.input_reader_generator(
         params,
@@ -160,7 +176,7 @@ class VideoClassificationTask(base_task.Task):
     if self._is_multilabel():
       entropy = -tf.reduce_mean(
           tf.reduce_sum(model_outputs * tf.math.log(model_outputs + 1e-8), -1))
-      total_loss = tf.keras.losses.binary_crossentropy(
+      total_loss = tf_keras.losses.binary_crossentropy(
           labels, model_outputs, from_logits=False)
       all_losses.update({
           'class_loss': total_loss,
@@ -168,13 +184,13 @@ class VideoClassificationTask(base_task.Task):
       })
     else:
       if losses_config.one_hot:
-        total_loss = tf.keras.losses.categorical_crossentropy(
+        total_loss = tf_keras.losses.categorical_crossentropy(
             labels,
             model_outputs,
             from_logits=False,
             label_smoothing=losses_config.label_smoothing)
       else:
-        total_loss = tf.keras.losses.sparse_categorical_crossentropy(
+        total_loss = tf_keras.losses.sparse_categorical_crossentropy(
             labels, model_outputs, from_logits=False)
 
       total_loss = tf_utils.safe_mean(total_loss)
@@ -194,30 +210,30 @@ class VideoClassificationTask(base_task.Task):
     """Gets streaming metrics for training/validation."""
     if self.task_config.losses.one_hot:
       metrics = [
-          tf.keras.metrics.CategoricalAccuracy(name='accuracy'),
-          tf.keras.metrics.TopKCategoricalAccuracy(k=1, name='top_1_accuracy'),
-          tf.keras.metrics.TopKCategoricalAccuracy(k=5, name='top_5_accuracy')
+          tf_keras.metrics.CategoricalAccuracy(name='accuracy'),
+          tf_keras.metrics.TopKCategoricalAccuracy(k=1, name='top_1_accuracy'),
+          tf_keras.metrics.TopKCategoricalAccuracy(k=5, name='top_5_accuracy')
       ]
       if self._is_multilabel():
         metrics.append(
-            tf.keras.metrics.AUC(
+            tf_keras.metrics.AUC(
                 curve='ROC', multi_label=self._is_multilabel(), name='ROC-AUC'))
         metrics.append(
-            tf.keras.metrics.RecallAtPrecision(
+            tf_keras.metrics.RecallAtPrecision(
                 0.95, name='RecallAtPrecision95'))
         metrics.append(
-            tf.keras.metrics.AUC(
+            tf_keras.metrics.AUC(
                 curve='PR', multi_label=self._is_multilabel(), name='PR-AUC'))
         if self.task_config.metrics.use_per_class_recall:
           for i in range(self._get_num_classes()):
             metrics.append(
-                tf.keras.metrics.Recall(class_id=i, name=f'recall-{i}'))
+                tf_keras.metrics.Recall(class_id=i, name=f'recall-{i}'))
     else:
       metrics = [
-          tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
-          tf.keras.metrics.SparseTopKCategoricalAccuracy(
+          tf_keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+          tf_keras.metrics.SparseTopKCategoricalAccuracy(
               k=1, name='top_1_accuracy'),
-          tf.keras.metrics.SparseTopKCategoricalAccuracy(
+          tf_keras.metrics.SparseTopKCategoricalAccuracy(
               k=5, name='top_5_accuracy')
       ]
     return metrics
@@ -240,8 +256,8 @@ class VideoClassificationTask(base_task.Task):
 
   def train_step(self,
                  inputs: Tuple[Any, Any],
-                 model: tf.keras.Model,
-                 optimizer: tf.keras.optimizers.Optimizer,
+                 model: tf_keras.Model,
+                 optimizer: tf_keras.optimizers.Optimizer,
                  metrics: Optional[List[Any]] = None):
     """Does forward and backward.
 
@@ -271,9 +287,9 @@ class VideoClassificationTask(base_task.Task):
 
       # Computes per-replica loss.
       if self._is_multilabel():
-        outputs = tf.math.sigmoid(outputs)
+        outputs = tf.nest.map_structure(tf.math.sigmoid, outputs)
       else:
-        outputs = tf.math.softmax(outputs)
+        outputs = tf.nest.map_structure(tf.math.softmax, outputs)
       all_losses = self.build_losses(
           model_outputs=outputs, labels=labels, aux_losses=model.losses)
       loss = all_losses[self.loss]
@@ -284,14 +300,14 @@ class VideoClassificationTask(base_task.Task):
       # For mixed_precision policy, when LossScaleOptimizer is used, loss is
       # scaled for numerical stability.
       if isinstance(
-          optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+          optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)
     # Scales back gradient before apply_gradients when LossScaleOptimizer is
     # used.
-    if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+    if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
     optimizer.apply_gradients(list(zip(grads, tvars)))
 
@@ -306,9 +322,9 @@ class VideoClassificationTask(base_task.Task):
 
   def validation_step(self,
                       inputs: Tuple[Any, Any],
-                      model: tf.keras.Model,
+                      model: tf_keras.Model,
                       metrics: Optional[List[Any]] = None):
-    """Validatation step.
+    """Validation step.
 
     Args:
       inputs: a dictionary of input tensors.
@@ -338,13 +354,13 @@ class VideoClassificationTask(base_task.Task):
       logs.update({m.name: m.result() for m in model.metrics})
     return logs
 
-  def inference_step(self, features: tf.Tensor, model: tf.keras.Model):
+  def inference_step(self, features: tf.Tensor, model: tf_keras.Model):
     """Performs the forward step."""
     outputs = model(features, training=False)
     if self._is_multilabel():
-      outputs = tf.math.sigmoid(outputs)
+      outputs = tf.nest.map_structure(tf.math.sigmoid, outputs)
     else:
-      outputs = tf.math.softmax(outputs)
+      outputs = tf.nest.map_structure(tf.math.softmax, outputs)
     num_test_views = self._get_num_test_views()
     if num_test_views > 1:
       # Averaging output probabilities across multiples views.

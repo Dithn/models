@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,19 +14,15 @@
 
 """Tests for TEAMS pre trainer network."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.modeling import activations
 from official.nlp.modeling.networks import encoder_scaffold
 from official.nlp.modeling.networks import packed_sequence_embedding
 from official.projects.teams import teams_pretrainer
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class TeamsPretrainerTest(keras_parameterized.TestCase):
+class TeamsPretrainerTest(tf.test.TestCase):
 
   # Build a transformer network to use within the TEAMS trainer.
   def _get_network(self, vocab_size):
@@ -38,7 +34,7 @@ class TeamsPretrainerTest(keras_parameterized.TestCase):
         'hidden_size': hidden_size,
         'embedding_width': hidden_size,
         'max_seq_length': sequence_length,
-        'initializer': tf.keras.initializers.TruncatedNormal(stddev=0.02),
+        'initializer': tf_keras.initializers.TruncatedNormal(stddev=0.02),
         'dropout_rate': 0.1,
     }
     embedding_inst = packed_sequence_embedding.PackedSequenceEmbedding(
@@ -55,7 +51,7 @@ class TeamsPretrainerTest(keras_parameterized.TestCase):
         'attention_dropout_rate':
             0.1,
         'kernel_initializer':
-            tf.keras.initializers.TruncatedNormal(stddev=0.02),
+            tf_keras.initializers.TruncatedNormal(stddev=0.02),
     }
     return encoder_scaffold.EncoderScaffold(
         num_hidden_instances=2,
@@ -83,12 +79,12 @@ class TeamsPretrainerTest(keras_parameterized.TestCase):
     # Create a set of 2-dimensional inputs (the first dimension is implicit).
     num_token_predictions = 2
     sequence_length = 128
-    word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    lm_positions = tf.keras.Input(
+    word_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    mask = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    type_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    lm_positions = tf_keras.Input(
         shape=(num_token_predictions,), dtype=tf.int32)
-    lm_ids = tf.keras.Input(shape=(num_token_predictions,), dtype=tf.int32)
+    lm_ids = tf_keras.Input(shape=(num_token_predictions,), dtype=tf.int32)
     inputs = {
         'input_word_ids': word_ids,
         'input_mask': mask,

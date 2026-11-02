@@ -1,4 +1,4 @@
-# Copyright 2022 The Orbit Authors. All Rights Reserved.
+# Copyright 2026 The Orbit Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 from orbit import actions
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class ConditionalActionTest(tf.test.TestCase):
@@ -27,7 +27,7 @@ class ConditionalActionTest(tf.test.TestCase):
       raise AssertionError(str(arg))
 
     conditional_action = actions.ConditionalAction(
-        condition=lambda x: x['value'], action=raise_assertion)
+        condition=lambda x: x['value'], action=raise_assertion)  # pyrefly: ignore[bad-argument-type]
 
     conditional_action({'value': False})  # Nothing is raised.
     with self.assertRaises(AssertionError) as ctx:

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,13 @@
 # limitations under the License.
 
 """Keras-based TransformerEncoder block layer."""
-import tensorflow as tf
+import tensorflow as tf, tf_keras
+
+from official.modeling import tf_utils
 from official.nlp.modeling.layers import reuse_attention as attention
 
 
-class ReuseTransformer(tf.keras.layers.Layer):
+class ReuseTransformer(tf_keras.layers.Layer):
   """Transformer layer.
 
   This layer implements the ReuseTransformer Encoder from
@@ -106,13 +108,13 @@ class ReuseTransformer(tf.keras.layers.Layer):
     self._output_dropout = output_dropout
     self._output_dropout_rate = output_dropout
     self._output_range = output_range
-    self._kernel_initializer = tf.keras.initializers.get(kernel_initializer)
-    self._bias_initializer = tf.keras.initializers.get(bias_initializer)
-    self._kernel_regularizer = tf.keras.regularizers.get(kernel_regularizer)
-    self._bias_regularizer = tf.keras.regularizers.get(bias_regularizer)
-    self._activity_regularizer = tf.keras.regularizers.get(activity_regularizer)
-    self._kernel_constraint = tf.keras.constraints.get(kernel_constraint)
-    self._bias_constraint = tf.keras.constraints.get(bias_constraint)
+    self._kernel_initializer = tf_keras.initializers.get(kernel_initializer)
+    self._bias_initializer = tf_keras.initializers.get(bias_initializer)
+    self._kernel_regularizer = tf_keras.regularizers.get(kernel_regularizer)
+    self._bias_regularizer = tf_keras.regularizers.get(bias_regularizer)
+    self._activity_regularizer = tf_keras.regularizers.get(activity_regularizer)
+    self._kernel_constraint = tf_keras.constraints.get(kernel_constraint)
+    self._bias_constraint = tf_keras.constraints.get(bias_constraint)
     self._use_bias = use_bias
     self._norm_first = norm_first
     self._norm_epsilon = norm_epsilon
@@ -128,10 +130,11 @@ class ReuseTransformer(tf.keras.layers.Layer):
                                  self._max_reuse_layer_idx < self._layer_idx)):
       self._reuse_attention = 0
     if attention_initializer:
-      self._attention_initializer = tf.keras.initializers.get(
+      self._attention_initializer = tf_keras.initializers.get(
           attention_initializer)
     else:
-      self._attention_initializer = self._kernel_initializer
+      self._attention_initializer = tf_utils.clone_initializer(
+          self._kernel_initializer)
     self._attention_axes = attention_axes
 
   def build(self, input_shape):
@@ -156,7 +159,6 @@ class ReuseTransformer(tf.keras.layers.Layer):
     else:
       self._attention_head_size = self._head_size
     common_kwargs = dict(
-        bias_initializer=self._bias_initializer,
         kernel_regularizer=self._kernel_regularizer,
         bias_regularizer=self._bias_regularizer,
         activity_regularizer=self._activity_regularizer,
@@ -168,49 +170,52 @@ class ReuseTransformer(tf.keras.layers.Layer):
         dropout=self._attention_dropout,
         use_bias=self._use_bias,
         kernel_initializer=self._attention_initializer,
+        bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
         attention_axes=self._attention_axes,
         reuse_attention=self._reuse_attention,
         use_relative_pe=self._use_relative_pe,
         pe_max_seq_length=self._pe_max_seq_length,
         name="self_attention",
         **common_kwargs)
-    self._attention_dropout = tf.keras.layers.Dropout(
+    self._attention_dropout = tf_keras.layers.Dropout(
         rate=self._output_dropout)
     # Use float32 in layernorm for numeric stability.
     # It is probably safe in mixed_float16, but we haven't validated this yet.
     self._attention_layer_norm = (
-        tf.keras.layers.LayerNormalization(
+        tf_keras.layers.LayerNormalization(
             name="self_attention_layer_norm",
             axis=-1,
             epsilon=self._norm_epsilon,
             dtype=tf.float32))
-    self._intermediate_dense = tf.keras.layers.experimental.EinsumDense(
+    self._intermediate_dense = tf_keras.layers.EinsumDense(
         einsum_equation,
         output_shape=(None, self._inner_dim),
         bias_axes="d",
-        kernel_initializer=self._kernel_initializer,
+        kernel_initializer=tf_utils.clone_initializer(self._kernel_initializer),
+        bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
         name="intermediate",
         **common_kwargs)
-    policy = tf.keras.mixed_precision.global_policy()
+    policy = tf_keras.mixed_precision.global_policy()
     if policy.name == "mixed_bfloat16":
       # bfloat16 causes BERT with the LAMB optimizer to not converge
       # as well, so we use float32.
       # TODO(b/154538392): Investigate this.
       policy = tf.float32
-    self._intermediate_activation_layer = tf.keras.layers.Activation(
+    self._intermediate_activation_layer = tf_keras.layers.Activation(
         self._inner_activation, dtype=policy)
-    self._inner_dropout_layer = tf.keras.layers.Dropout(
+    self._inner_dropout_layer = tf_keras.layers.Dropout(
         rate=self._inner_dropout)
-    self._output_dense = tf.keras.layers.experimental.EinsumDense(
+    self._output_dense = tf_keras.layers.EinsumDense(
         einsum_equation,
         output_shape=(None, hidden_size),
         bias_axes="d",
         name="output",
-        kernel_initializer=self._kernel_initializer,
+        kernel_initializer=tf_utils.clone_initializer(self._kernel_initializer),
+        bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
         **common_kwargs)
-    self._output_dropout = tf.keras.layers.Dropout(rate=self._output_dropout)
+    self._output_dropout = tf_keras.layers.Dropout(rate=self._output_dropout)
     # Use float32 in layernorm for numeric stability.
-    self._output_layer_norm = tf.keras.layers.LayerNormalization(
+    self._output_layer_norm = tf_keras.layers.LayerNormalization(
         name="output_layer_norm",
         axis=-1,
         epsilon=self._norm_epsilon,
@@ -240,19 +245,19 @@ class ReuseTransformer(tf.keras.layers.Layer):
         "pe_max_seq_length": self._pe_max_seq_length,
         "max_reuse_layer_idx": self._max_reuse_layer_idx,
         "kernel_initializer":
-            tf.keras.initializers.serialize(self._kernel_initializer),
+            tf_keras.initializers.serialize(self._kernel_initializer),
         "bias_initializer":
-            tf.keras.initializers.serialize(self._bias_initializer),
+            tf_keras.initializers.serialize(self._bias_initializer),
         "kernel_regularizer":
-            tf.keras.regularizers.serialize(self._kernel_regularizer),
+            tf_keras.regularizers.serialize(self._kernel_regularizer),
         "bias_regularizer":
-            tf.keras.regularizers.serialize(self._bias_regularizer),
+            tf_keras.regularizers.serialize(self._bias_regularizer),
         "activity_regularizer":
-            tf.keras.regularizers.serialize(self._activity_regularizer),
+            tf_keras.regularizers.serialize(self._activity_regularizer),
         "kernel_constraint":
-            tf.keras.constraints.serialize(self._kernel_constraint),
+            tf_keras.constraints.serialize(self._kernel_constraint),
         "bias_constraint":
-            tf.keras.constraints.serialize(self._bias_constraint),
+            tf_keras.constraints.serialize(self._bias_constraint),
         "use_bias":
             self._use_bias,
         "norm_first":
@@ -262,7 +267,7 @@ class ReuseTransformer(tf.keras.layers.Layer):
         "inner_dropout":
             self._inner_dropout,
         "attention_initializer":
-            tf.keras.initializers.serialize(self._attention_initializer),
+            tf_keras.initializers.serialize(self._attention_initializer),
         "attention_axes": self._attention_axes,
     }
     base_config = super(ReuseTransformer, self).get_config()
@@ -329,9 +334,9 @@ class ReuseTransformer(tf.keras.layers.Layer):
         reuse_attention_scores=reuse_attention_scores,
         return_attention_scores=True)
     attention_output, attention_scores = attention_output
-    attention_output = self._attention_dropout(attention_output)
+    attention_output = self._attention_dropout(attention_output)  # pyrefly: ignore[not-callable]
     if self._norm_first:
-      attention_output = source_tensor + attention_output
+      attention_output = source_tensor + attention_output  # pyrefly: ignore[unbound-name]
     else:
       attention_output = self._attention_layer_norm(target_tensor +
                                                     attention_output)
@@ -343,10 +348,10 @@ class ReuseTransformer(tf.keras.layers.Layer):
     inner_output = self._intermediate_activation_layer(inner_output)
     inner_output = self._inner_dropout_layer(inner_output)
     layer_output = self._output_dense(inner_output)
-    layer_output = self._output_dropout(layer_output)
+    layer_output = self._output_dropout(layer_output)  # pyrefly: ignore[not-callable]
 
     if self._norm_first:
-      return source_attention_output + layer_output, attention_scores
+      return source_attention_output + layer_output, attention_scores  # pyrefly: ignore[unbound-name]
 
     # During mixed precision training, layer norm output is always fp32 for now.
     # Casts fp32 for the subsequent add.

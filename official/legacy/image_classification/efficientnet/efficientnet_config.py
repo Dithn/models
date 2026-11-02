@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Configuration definitions for EfficientNet losses, learning rates, and optimizers."""
 from __future__ import absolute_import
 from __future__ import division
@@ -56,19 +55,28 @@ class EfficientNetModelConfig(base_configs.ModelConfig):
               'dtype': 'float32',
           }
       })
-  loss: base_configs.LossConfig = base_configs.LossConfig(
-      name='categorical_crossentropy', label_smoothing=0.1)
-  optimizer: base_configs.OptimizerConfig = base_configs.OptimizerConfig(
-      name='rmsprop',
-      decay=0.9,
-      epsilon=0.001,
-      momentum=0.9,
-      moving_average_decay=None)
-  learning_rate: base_configs.LearningRateConfig = base_configs.LearningRateConfig(  # pylint: disable=line-too-long
-      name='exponential',
-      initial_lr=0.008,
-      decay_epochs=2.4,
-      decay_rate=0.97,
-      warmup_epochs=5,
-      scale_by_batch_size=1. / 128.,
-      staircase=True)
+  loss: base_configs.LossConfig = dataclasses.field(
+      default_factory=lambda: base_configs.LossConfig(  # pylint: disable=g-long-lambda
+          name='categorical_crossentropy', label_smoothing=0.1
+      )
+  )
+  optimizer: base_configs.OptimizerConfig = dataclasses.field(
+      default_factory=lambda: base_configs.OptimizerConfig(  # pylint: disable=g-long-lambda
+          name='rmsprop',
+          decay=0.9,
+          epsilon=0.001,
+          momentum=0.9,
+          moving_average_decay=None,
+      )
+  )
+  learning_rate: base_configs.LearningRateConfig = dataclasses.field(
+      default_factory=lambda: base_configs.LearningRateConfig(  # pylint: disable=g-long-lambda
+          name='exponential',
+          initial_lr=0.008,
+          decay_epochs=2.4,
+          decay_rate=0.97,
+          warmup_epochs=5,
+          scale_by_batch_size=1.0 / 128.0,
+          staircase=True,
+      )
+  )

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Definitions for high level configuration groups.."""
 
 import dataclasses
@@ -113,10 +112,16 @@ class TrainConfig(hyperparams.Config):
   resume_checkpoint: bool = None
   epochs: int = None
   steps: int = None
-  callbacks: CallbacksConfig = CallbacksConfig()
+  callbacks: CallbacksConfig = dataclasses.field(
+      default_factory=CallbacksConfig
+  )
   metrics: MetricsConfig = None
-  tensorboard: TensorBoardConfig = TensorBoardConfig()
-  time_history: TimeHistoryConfig = TimeHistoryConfig()
+  tensorboard: TensorBoardConfig = dataclasses.field(
+      default_factory=TensorBoardConfig
+  )
+  time_history: TimeHistoryConfig = dataclasses.field(
+      default_factory=TimeHistoryConfig
+  )
   set_epoch_loop: bool = False
 
 

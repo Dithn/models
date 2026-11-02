@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for classification network."""
 
-# Import libraries
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
@@ -29,19 +27,48 @@ from official.vision.modeling import classification_model
 class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
+      (192 * 4, 3, 12, 192, 5524416),
+      (384 * 4, 6, 12, 384, 21665664),
+  )
+  def test_vision_transformer_creation(self, mlp_dim, num_heads, num_layers,
+                                       hidden_size, num_params):
+    """Test for creation of a Vision Transformer classifier."""
+    inputs = np.random.rand(2, 224, 224, 3)
+
+    tf_keras.backend.set_image_data_format('channels_last')
+
+    backbone = backbones.VisionTransformer(
+        mlp_dim=mlp_dim,
+        num_heads=num_heads,
+        num_layers=num_layers,
+        hidden_size=hidden_size,
+        input_specs=tf_keras.layers.InputSpec(shape=[None, 224, 224, 3]),
+    )
+    self.assertEqual(backbone.count_params(), num_params)
+
+    num_classes = 1000
+    model = classification_model.ClassificationModel(
+        backbone=backbone,
+        num_classes=num_classes,
+        dropout_rate=0.2,
+    )
+
+    logits = model(inputs)
+    self.assertAllEqual([2, num_classes], logits.numpy().shape)
+
+  @parameterized.parameters(
       (128, 50, 'relu'),
       (128, 50, 'relu'),
       (128, 50, 'swish'),
   )
-  def test_resnet_network_creation(
-      self, input_size, resnet_model_id, activation):
+  def test_resnet_network_creation(self, input_size, resnet_model_id,
+                                   activation):
     """Test for creation of a ResNet-50 classifier."""
     inputs = np.random.rand(2, input_size, input_size, 3)
 
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
 
-    backbone = backbones.ResNet(
-        model_id=resnet_model_id, activation=activation)
+    backbone = backbones.ResNet(model_id=resnet_model_id, activation=activation)
     self.assertEqual(backbone.count_params(), 23561152)
 
     num_classes = 1000
@@ -60,7 +87,7 @@ class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
     revnet_model_id = 56
     inputs = np.random.rand(2, 224, 224, 3)
 
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
 
     backbone = backbones.RevNet(model_id=revnet_model_id)
     self.assertEqual(backbone.count_params(), 19473792)
@@ -95,7 +122,7 @@ class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
     """Test for creation of a MobileNet classifier."""
     inputs = np.random.rand(2, 224, 224, 3)
 
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
 
     backbone = backbones.MobileNet(
         model_id=mobilenet_model_id, filter_size_scale=filter_size_scale)
@@ -122,7 +149,7 @@ class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
     """Test for sync bn on TPU and GPU devices."""
     inputs = np.random.rand(64, 128, 128, 3)
 
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
 
     with strategy.scope():
       backbone = backbones.ResNet(model_id=50, use_sync_bn=use_sync_bn)
@@ -147,9 +174,9 @@ class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
       inputs = np.random.rand(2, 128, 128, input_dim)
     else:
       inputs = np.random.rand(2, input_dim, 128, 128)
-    input_specs = tf.keras.layers.InputSpec(shape=inputs.shape)
+    input_specs = tf_keras.layers.InputSpec(shape=inputs.shape)
 
-    tf.keras.backend.set_image_data_format(data_format)
+    tf_keras.backend.set_image_data_format(data_format)
 
     with strategy.scope():
       backbone = backbones.ResNet(model_id=50, input_specs=input_specs)
@@ -164,7 +191,7 @@ class ClassificationNetworkTest(parameterized.TestCase, tf.test.TestCase):
   def test_serialize_deserialize(self):
     """Validate the classification net can be serialized and deserialized."""
 
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
     backbone = backbones.ResNet(model_id=50)
 
     model = classification_model.ClassificationModel(

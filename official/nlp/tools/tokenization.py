@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import re
 import unicodedata
 
 import six
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 import sentencepiece as spm
 
@@ -78,7 +78,7 @@ def validate_case_matches_checkpoint(do_lower_case, init_checkpoint):
         "should pass in `--do_lower_case=%s` so that the fine-tuning matches "
         "how the model was pre-training. If this error is wrong, please "
         "just comment out this check." %
-        (actual_flag, init_checkpoint, model_name, case_name, opposite_flag))
+        (actual_flag, init_checkpoint, model_name, case_name, opposite_flag))  # pyrefly: ignore[unbound-name]
 
 
 def convert_to_unicode(text):
@@ -92,8 +92,8 @@ def convert_to_unicode(text):
       raise ValueError("Unsupported string type: %s" % (type(text)))
   elif six.PY2:
     if isinstance(text, str):
-      return text.decode("utf-8", "ignore")
-    elif isinstance(text, unicode):
+      return text.decode("utf-8", "ignore")  # pyrefly: ignore[missing-attribute]
+    elif isinstance(text, unicode):  # pyrefly: ignore[unknown-name]
       return text
     else:
       raise ValueError("Unsupported string type: %s" % (type(text)))
@@ -116,7 +116,7 @@ def printable_text(text):
   elif six.PY2:
     if isinstance(text, str):
       return text
-    elif isinstance(text, unicode):
+    elif isinstance(text, unicode):  # pyrefly: ignore[unknown-name]
       return text.encode("utf-8")
     else:
       raise ValueError("Unsupported string type: %s" % (type(text)))
@@ -428,15 +428,17 @@ def preprocess_text(inputs, remove_space=True, lower=False):
     The preprocessed text.
 
   """
+  # Byte strings need to be explicitly decoded to unicode text,
+  # typically using UTF-8. A latin-1 fallback is included for
+  # backward compatibility with legacy sentence piece models.
+  if isinstance(inputs, six.binary_type):
+    try:
+      inputs = six.ensure_text(inputs, "utf-8")
+    except UnicodeDecodeError:
+      inputs = six.ensure_text(inputs, "latin-1")
   outputs = inputs
   if remove_space:
     outputs = " ".join(inputs.strip().split())
-
-  if six.PY2 and isinstance(outputs, str):
-    try:
-      outputs = six.ensure_text(outputs, "utf-8")
-    except UnicodeDecodeError:
-      outputs = six.ensure_text(outputs, "latin-1")
 
   outputs = unicodedata.normalize("NFKD", outputs)
   outputs = "".join([c for c in outputs if not unicodedata.combining(c)])

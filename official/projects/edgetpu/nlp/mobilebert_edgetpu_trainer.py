@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from typing import Optional
 
 from absl import logging
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import optimization
 from official.nlp import modeling
@@ -65,9 +65,9 @@ def _get_distribution_losses(teacher, student):
 def _get_attention_loss(teacher_score, student_score):
   """Function to calculate attention loss for transformer layers."""
   # Note that the definition of KLDivergence here is a little different from
-  # the original one (tf.keras.losses.KLDivergence). We adopt this approach
+  # the original one (tf_keras.losses.KLDivergence). We adopt this approach
   # to stay consistent with the TF1 implementation.
-  teacher_weight = tf.keras.activations.softmax(teacher_score, axis=-1)
+  teacher_weight = tf_keras.activations.softmax(teacher_score, axis=-1)
   student_log_weight = tf.nn.log_softmax(student_score, axis=-1)
   kl_divergence = -(teacher_weight * student_log_weight)
   kl_divergence = tf.math.reduce_sum(kl_divergence, axis=-1, keepdims=True)
@@ -91,7 +91,7 @@ def _build_sub_encoder(encoder, stage_number):
     layer_output, attention_score = encoder.transformer_layers[layer_idx](
         layer_output, attention_mask, return_attention_scores=True)
 
-  return tf.keras.Model(
+  return tf_keras.Model(
       inputs=[input_ids, input_mask, type_ids],
       outputs=[layer_output, attention_score])
 
@@ -145,7 +145,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
     self.current_optimizer = self.layer_wise_optimizer
 
     # A non-trainable layer for feature normalization for transfer loss.
-    self._layer_norm = tf.keras.layers.LayerNormalization(
+    self._layer_norm = tf_keras.layers.LayerNormalization(
         axis=-1,
         beta_initializer='zeros',
         gamma_initializer='ones',
@@ -204,7 +204,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
           stage_number=int(self.stage * self.ratio))
       teacher_output_feature, teacher_attention_score = teacher_sub_encoder(
           inputs)
-      return tf.keras.Model(
+      return tf_keras.Model(
           inputs=inputs,
           outputs=dict(
               student_output_feature=student_output_feature,
@@ -216,7 +216,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
       inputs = self.student_model.inputs
       student_pretrainer_outputs = self.student_model(inputs)
       teacher_pretrainer_outputs = self.teacher_model(inputs)
-      model = tf.keras.Model(
+      model = tf_keras.Model(
           inputs=inputs,
           outputs=dict(
               student_pretrainer_outputs=student_pretrainer_outputs,
@@ -253,19 +253,19 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
   def build_metrics(self):
     """Creates metrics functions for the training."""
     self.train_metrics = {
-        'feature_transfer_mse': tf.keras.metrics.Mean(),
-        'beta_transfer_loss': tf.keras.metrics.Mean(),
-        'gamma_transfer_loss': tf.keras.metrics.Mean(),
-        'attention_transfer_loss': tf.keras.metrics.Mean(),
-        'masked_lm_accuracy': tf.keras.metrics.SparseCategoricalAccuracy(),
-        'lm_example_loss': tf.keras.metrics.Mean(),
-        'total_loss': tf.keras.metrics.Mean(),
-        'next_sentence_accuracy': tf.keras.metrics.SparseCategoricalAccuracy(),
-        'next_sentence_loss': tf.keras.metrics.Mean(),
+        'feature_transfer_mse': tf_keras.metrics.Mean(),
+        'beta_transfer_loss': tf_keras.metrics.Mean(),
+        'gamma_transfer_loss': tf_keras.metrics.Mean(),
+        'attention_transfer_loss': tf_keras.metrics.Mean(),
+        'masked_lm_accuracy': tf_keras.metrics.SparseCategoricalAccuracy(),
+        'lm_example_loss': tf_keras.metrics.Mean(),
+        'total_loss': tf_keras.metrics.Mean(),
+        'next_sentence_accuracy': tf_keras.metrics.SparseCategoricalAccuracy(),
+        'next_sentence_loss': tf_keras.metrics.Mean(),
     }
     self.eval_metrics = {
-        'masked_lm_accuracy': tf.keras.metrics.SparseCategoricalAccuracy(),
-        'next_sentence_accuracy': tf.keras.metrics.SparseCategoricalAccuracy(),
+        'masked_lm_accuracy': tf_keras.metrics.SparseCategoricalAccuracy(),
+        'next_sentence_accuracy': tf_keras.metrics.SparseCategoricalAccuracy(),
     }
 
   def build_exported_ckpt_manager(self):
@@ -298,7 +298,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
     if self.mode == DistillationMode.LAYER_WISE:
       teacher_feature = outputs['teacher_output_feature']
       student_feature = outputs['student_output_feature']
-      feature_transfer_loss = tf.keras.losses.mean_squared_error(
+      feature_transfer_loss = tf_keras.losses.mean_squared_error(
           self._layer_norm(teacher_feature), self._layer_norm(student_feature))
       # feature_transfer_loss = tf.reduce_mean(feature_transfer_loss)
       feature_transfer_loss *= self.layer_wise_distill_config.hidden_distill_factor
@@ -349,7 +349,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
       sentence_outputs = tf.cast(
           student_pretrainer_output['next_sentence'], dtype=tf.float32)
       sentence_loss = tf.reduce_mean(
-          tf.keras.losses.sparse_categorical_crossentropy(
+          tf_keras.losses.sparse_categorical_crossentropy(
               sentence_labels, sentence_outputs, from_logits=True))
       total_loss += sentence_loss
     else:
@@ -357,13 +357,13 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
 
     if self.mode == DistillationMode.LAYER_WISE:
       self.train_metrics['feature_transfer_mse'].update_state(
-          feature_transfer_loss)
-      self.train_metrics['beta_transfer_loss'].update_state(beta_loss)
-      self.train_metrics['gamma_transfer_loss'].update_state(gamma_loss)
-      self.train_metrics['attention_transfer_loss'].update_state(attention_loss)
+          feature_transfer_loss)  # pyrefly: ignore[unbound-name]
+      self.train_metrics['beta_transfer_loss'].update_state(beta_loss)  # pyrefly: ignore[unbound-name]
+      self.train_metrics['gamma_transfer_loss'].update_state(gamma_loss)  # pyrefly: ignore[unbound-name]
+      self.train_metrics['attention_transfer_loss'].update_state(attention_loss)  # pyrefly: ignore[unbound-name]
     elif self.mode == DistillationMode.END2END:
-      self.train_metrics['lm_example_loss'].update_state(mlm_loss)
-      self.train_metrics['next_sentence_loss'].update_state(sentence_loss)
+      self.train_metrics['lm_example_loss'].update_state(mlm_loss)  # pyrefly: ignore[unbound-name]
+      self.train_metrics['next_sentence_loss'].update_state(sentence_loss)  # pyrefly: ignore[unbound-name]
     self.train_metrics['total_loss'].update_state(total_loss)
 
     return total_loss
@@ -467,7 +467,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
       # e2e distillation training stage.
       if self.exported_ckpt_manager is None:
         self.build_exported_ckpt_manager()
-      self.exported_ckpt_manager.save(
+      self.exported_ckpt_manager.save(  # pyrefly: ignore[missing-attribute]
           checkpoint_number=self.current_step.numpy(),
           check_interval=True)
 
@@ -512,7 +512,7 @@ class MobileBERTEdgeTPUDistillationTrainer(orbit.StandardTrainer,
 
     self.strategy.run(step_fn, args=(next(iterator),))
 
-  def eval_end(self):
+  def eval_end(self):  # pyrefly: ignore[bad-override]
     return {'masked_lm_accuracy':
                 self.eval_metrics['masked_lm_accuracy'].result(),
             'next_sentence_accuracy':

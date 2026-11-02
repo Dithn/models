@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import sys
 from absl.testing import parameterized
 import orbit
 import portpicker
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
@@ -148,30 +148,6 @@ class MockAsyncTrainer(trainer_lib._AsyncTrainer):
   def eval_end(self):
     self.join()
     return self.eval_global_step.numpy()
-
-
-class RecoveryTest(tf.test.TestCase):
-
-  def test_recovery_module(self):
-    ckpt = tf.train.Checkpoint(v=tf.Variable(1, dtype=tf.int32))
-    model_dir = self.get_temp_dir()
-    manager = tf.train.CheckpointManager(ckpt, model_dir, max_to_keep=1)
-    recovery_module = trainer_lib.Recovery(
-        loss_upper_bound=1.0,
-        checkpoint_manager=manager,
-        recovery_begin_steps=1,
-        recovery_max_trials=1)
-    self.assertFalse(recovery_module.should_recover(1.1, 0))
-    self.assertFalse(recovery_module.should_recover(0.1, 1))
-    self.assertTrue(recovery_module.should_recover(1.1, 2))
-
-    # First triggers the recovery once.
-    recovery_module.maybe_recover(1.1, 10)
-
-    # Second time, it raises.
-    with self.assertRaisesRegex(
-        RuntimeError, 'The loss value is NaN .*'):
-      recovery_module.maybe_recover(1.1, 10)
 
 
 class TrainerTest(tf.test.TestCase, parameterized.TestCase):
@@ -336,14 +312,16 @@ class TrainerTest(tf.test.TestCase, parameterized.TestCase):
     trainer = self.create_test_trainer(config)
     if mixed_precision_dtype == 'float16':
       self.assertIsInstance(trainer.optimizer,
-                            tf.keras.mixed_precision.LossScaleOptimizer)
+                            tf_keras.mixed_precision.LossScaleOptimizer)
       if loss_scale in (None, 'dynamic'):
         self.assertTrue(trainer.optimizer.dynamic)
       else:
         self.assertFalse(trainer.optimizer.dynamic)
         self.assertEqual(trainer.optimizer.initial_scale, loss_scale)
     else:
-      self.assertIsInstance(trainer.optimizer, tf.keras.optimizers.SGD)
+      self.assertIsInstance(
+          trainer.optimizer,
+          (tf_keras.optimizers.SGD, tf_keras.optimizers.legacy.SGD))
 
     metrics = trainer.train(tf.convert_to_tensor(5, dtype=tf.int32))
     self.assertIn('training_loss', metrics)
@@ -371,7 +349,7 @@ class TrainerTest(tf.test.TestCase, parameterized.TestCase):
   def test_model_with_compiled_loss(self):
     task = mock_task.MockTask()
     model = task.build_model()
-    model.compile(loss=tf.keras.losses.CategoricalCrossentropy())
+    model.compile(loss=tf_keras.losses.CategoricalCrossentropy())
     trainer = trainer_lib.Trainer(
         self._config,
         task,

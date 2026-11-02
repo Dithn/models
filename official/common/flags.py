@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,7 +45,8 @@ def define_flags():
       default=None,
       enum_values=[
           'train', 'eval', 'train_and_eval', 'continuous_eval',
-          'continuous_train_and_eval', 'train_and_validate'
+          'continuous_train_and_eval', 'train_and_validate',
+          'train_and_post_eval'
       ],
       help='Mode to run: `train`, `eval`, `train_and_eval`, '
       '`continuous_eval`, `continuous_train_and_eval` and '
@@ -108,3 +109,33 @@ def define_flags():
 
   flags.DEFINE_string(
       'tf_data_service', default=None, help='The tf.data service address')
+
+  flags.DEFINE_string(
+      'tpu_platform', default=None, help='TPU platform type.')
+
+  flags.DEFINE_string(
+      'tfhub_handle',
+      default=None,
+      help=(
+          'TFHub handle for publishing the model to TFHub. When this flag '
+          'is set your train.py should use xm_tfhub to publish to TFHub. '
+          'If using TFleX, prefer tflex_output_uri + TfHubPusher component.'
+      ),
+  )
+
+  # To use TFleX components that consume a model, set this flag by configuring
+  # a TFleX tfx.borg.types.standard_artifacts.Model output artifact.
+  # (go/tflex-xm#connect-your-component-to-other-components)
+  # Meanwhile have your train.py save a serializable model to this destination:
+  #   model.save(os.path.join(FLAGS.tflex_output_uri, 'Format-Servo'),
+  #              save_format='tf')
+  # (https://www.tensorflow.org/guide/keras/serialization_and_saving)
+  flags.DEFINE_string(
+      'tflex_output_uri',
+      default=None,
+      help=(
+          'When running in TFleX, you can configure an XManagerLauncher output'
+          ' to set this flag'
+          ' (go/tflex-xm#connect-your-component-to-other-components)'
+      ),
+  )

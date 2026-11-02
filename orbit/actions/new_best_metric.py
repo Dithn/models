@@ -1,4 +1,4 @@
-# Copyright 2022 The Orbit Authors. All Rights Reserved.
+# Copyright 2026 The Orbit Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import uuid
 from orbit import runner
 from orbit import utils
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 MetricFn = Callable[[runner.Output], Union[float, tf.Tensor]]
 
@@ -40,7 +40,7 @@ class NewBestMetric:
   if it is achieved. These separate methods enable the same `NewBestMetric`
   instance to be reused as a condition multiple times, and can also provide
   additional preemption/failure safety. For example, to avoid updating the best
-  metric if a model export fails or is pre-empted:
+  metric if a model export fails or is pre-emptied:
 
       new_best_metric = orbit.actions.NewBestMetric(
         'accuracy', filename='/model/dir/best_metric')
@@ -93,7 +93,7 @@ class NewBestMetric:
     float_max = sys.float_info.max
     self._best_value = JSONPersistedValue(
         initial_value=-float_max if higher_is_better else float_max,
-        filename=filename,
+        filename=filename,  # pyrefly: ignore[bad-argument-type]
         write_value=write_metric)
 
   def __call__(self, output: runner.Output) -> bool:

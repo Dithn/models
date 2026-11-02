@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Definitions for AssembleNet/++ structures.
 
 This structure is a `list` corresponding to a graph representation of the
@@ -62,7 +61,7 @@ def flat_lists_to_blocks(model_structures, model_edge_weights):
     if node[0] < 0:
       block = BlockSpec(level=node[0], temporal_dilation=node[1])
     else:
-      block = BlockSpec(
+      block = BlockSpec(  # pytype: disable=wrong-arg-types
           level=node[0],
           input_blocks=node[1],
           num_filters=node[2],
@@ -196,17 +195,24 @@ class Backbone3D(backbones_3d.Backbone3D):
     assemblenet_plus : AssembleNetPlus backbone config.
   """
   type: Optional[str] = None
-  assemblenet: AssembleNet = AssembleNet()
-  assemblenet_plus: AssembleNetPlus = AssembleNetPlus()
+  assemblenet: AssembleNet = dataclasses.field(default_factory=AssembleNet)
+  assemblenet_plus: AssembleNetPlus = dataclasses.field(
+      default_factory=AssembleNetPlus
+  )
 
 
 @dataclasses.dataclass
 class AssembleNetModel(video_classification.VideoClassificationModel):
   """The AssembleNet model config."""
   model_type: str = 'assemblenet'
-  backbone: Backbone3D = Backbone3D(type='assemblenet')
-  norm_activation: common.NormActivation = common.NormActivation(
-      norm_momentum=0.99, norm_epsilon=1e-5, use_sync_bn=True)
+  backbone: Backbone3D = dataclasses.field(
+      default_factory=lambda: Backbone3D(type='assemblenet')
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          norm_momentum=0.99, norm_epsilon=1e-5, use_sync_bn=True
+      )
+  )
   max_pool_predictions: bool = False
 
 
@@ -214,9 +220,14 @@ class AssembleNetModel(video_classification.VideoClassificationModel):
 class AssembleNetPlusModel(video_classification.VideoClassificationModel):
   """The AssembleNet model config."""
   model_type: str = 'assemblenet_plus'
-  backbone: Backbone3D = Backbone3D(type='assemblenet_plus')
-  norm_activation: common.NormActivation = common.NormActivation(
-      norm_momentum=0.99, norm_epsilon=1e-5, use_sync_bn=True)
+  backbone: Backbone3D = dataclasses.field(
+      default_factory=lambda: Backbone3D(type='assemblenet_plus')
+  )
+  norm_activation: common.NormActivation = dataclasses.field(
+      default_factory=lambda: common.NormActivation(  # pylint: disable=g-long-lambda
+          norm_momentum=0.99, norm_epsilon=1e-5, use_sync_bn=True
+      )
+  )
   max_pool_predictions: bool = False
 
 

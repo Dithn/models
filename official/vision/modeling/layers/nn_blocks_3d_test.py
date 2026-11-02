@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for resnet."""
 
-# Import libraries
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.modeling.layers import nn_blocks_3d
 
@@ -35,7 +33,7 @@ class NNBlocksTest(parameterized.TestCase, tf.test.TestCase):
     temporal_size = 16
     spatial_size = 128
     filters = 256
-    inputs = tf.keras.Input(
+    inputs = tf_keras.Input(
         shape=(temporal_size, spatial_size, spatial_size, filters * 4),
         batch_size=1)
     block = block_fn(

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ from absl import flags
 import numpy as np
 
 from pycocotools import mask
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 import multiprocessing as mp
 from official.vision.data import tfrecord_lib
@@ -66,8 +66,16 @@ flags.DEFINE_boolean(
     'include_panoptic_masks', False, 'Whether to include category and '
     'instance masks in the result. These are required to run the PQ evaluator '
     'default: False.')
+flags.DEFINE_boolean(
+    'panoptic_skip_crowd', False, 'Whether to skip crowd or not for panoptic '
+    'annotations. default: False.')
 flags.DEFINE_string('output_file_prefix', '/tmp/train', 'Path to output file')
 flags.DEFINE_integer('num_shards', 32, 'Number of shards for output file.')
+_NUM_PROCESSES = flags.DEFINE_integer(
+    'num_processes', None,
+    ('Number of parallel processes to use. '
+     'If set to 0, disables multi-processing.'))
+
 
 FLAGS = flags.FLAGS
 
@@ -107,7 +115,7 @@ def generate_coco_panoptics_masks(segments_info, mask_path,
       represent "stuff" and "things" classes respectively.
 
   Returns:
-    A dict with with keys: [u'semantic_segmentation_mask', u'category_mask',
+    A dict with keys: [u'semantic_segmentation_mask', u'category_mask',
       u'instance_mask']. The dict contains 'category_mask' and 'instance_mask'
       only if `include_panoptic_eval_masks` is set to True.
   """
@@ -129,7 +137,9 @@ def generate_coco_panoptics_masks(segments_info, mask_path,
   for idx, segment in enumerate(segments_info):
     segment_id = segment['id']
     category_id = segment['category_id']
-
+    is_crowd = segment['iscrowd']
+    if FLAGS.panoptic_skip_crowd and is_crowd:
+      continue
     if is_category_thing[category_id]:
       encoded_category_id = _THING_CLASS_ID
       instance_id = idx + 1
@@ -141,8 +151,8 @@ def generate_coco_panoptics_masks(segments_info, mask_path,
     semantic_segmentation_mask[segment_mask] = encoded_category_id
 
     if include_panoptic_masks:
-      category_mask[segment_mask] = category_id
-      instance_mask[segment_mask] = instance_id
+      category_mask[segment_mask] = category_id  # pyrefly: ignore[unbound-name]
+      instance_mask[segment_mask] = instance_id  # pyrefly: ignore[unbound-name]
 
   outputs = {
       'semantic_segmentation_mask': tfrecord_lib.encode_mask_as_png(
@@ -151,8 +161,8 @@ def generate_coco_panoptics_masks(segments_info, mask_path,
 
   if include_panoptic_masks:
     outputs.update({
-        'category_mask': tfrecord_lib.encode_mask_as_png(category_mask),
-        'instance_mask': tfrecord_lib.encode_mask_as_png(instance_mask)
+        'category_mask': tfrecord_lib.encode_mask_as_png(category_mask),  # pyrefly: ignore[unbound-name]
+        'instance_mask': tfrecord_lib.encode_mask_as_png(instance_mask)  # pyrefly: ignore[unbound-name]
         })
   return outputs
 
@@ -205,27 +215,30 @@ def bbox_annotations_to_feature_dict(
   data, num_skipped = coco_annotations_to_lists(
       bbox_annotations, id_to_name_map, image_height, image_width,
       include_masks)
-  feature_dict = {
-      'image/object/bbox/xmin':
-          tfrecord_lib.convert_to_feature(data['xmin']),
-      'image/object/bbox/xmax':
-          tfrecord_lib.convert_to_feature(data['xmax']),
-      'image/object/bbox/ymin':
-          tfrecord_lib.convert_to_feature(data['ymin']),
-      'image/object/bbox/ymax':
-          tfrecord_lib.convert_to_feature(data['ymax']),
-      'image/object/class/text':
-          tfrecord_lib.convert_to_feature(data['category_names']),
-      'image/object/class/label':
-          tfrecord_lib.convert_to_feature(data['category_id']),
-      'image/object/is_crowd':
-          tfrecord_lib.convert_to_feature(data['is_crowd']),
-      'image/object/area':
-          tfrecord_lib.convert_to_feature(data['area']),
-  }
-  if include_masks:
-    feature_dict['image/object/mask'] = (
-        tfrecord_lib.convert_to_feature(data['encoded_mask_png']))
+  feature_dict = {}
+  if len(bbox_annotations) != num_skipped:
+    feature_dict = {
+        'image/object/bbox/xmin': tfrecord_lib.convert_to_feature(data['xmin']),
+        'image/object/bbox/xmax': tfrecord_lib.convert_to_feature(data['xmax']),
+        'image/object/bbox/ymin': tfrecord_lib.convert_to_feature(data['ymin']),
+        'image/object/bbox/ymax': tfrecord_lib.convert_to_feature(data['ymax']),
+        'image/object/class/text': tfrecord_lib.convert_to_feature(
+            data['category_names']
+        ),
+        'image/object/class/label': tfrecord_lib.convert_to_feature(
+            data['category_id']
+        ),
+        'image/object/is_crowd': tfrecord_lib.convert_to_feature(
+            data['is_crowd']
+        ),
+        'image/object/area': tfrecord_lib.convert_to_feature(
+            data['area'], 'float_list'
+        ),
+    }
+    if include_masks:
+      feature_dict['image/object/mask'] = tfrecord_lib.convert_to_feature(
+          data['encoded_mask_png']
+      )
 
   return feature_dict, num_skipped
 
@@ -326,7 +339,7 @@ def create_tf_example(image,
 
   if panoptic_annotation:
     segments_info = panoptic_annotation['segments_info']
-    panoptic_mask_filename = os.path.join(
+    panoptic_mask_filename = os.path.join(  # pyrefly: ignore[no-matching-overload]
         panoptic_masks_dir,
         panoptic_annotation['file_name'])
     encoded_panoptic_masks = generate_coco_panoptics_masks(
@@ -518,7 +531,8 @@ def _create_tf_record_from_coco_annotations(images_info_file,
       include_masks=include_masks)
 
   num_skipped = tfrecord_lib.write_tf_record_dataset(
-      output_path, coco_annotations_iter, create_tf_example, num_shards)
+      output_path, coco_annotations_iter, create_tf_example, num_shards,
+      multiple_processes=_NUM_PROCESSES.value)
 
   logging.info('Finished writing, skipped %d annotations.', num_skipped)
 

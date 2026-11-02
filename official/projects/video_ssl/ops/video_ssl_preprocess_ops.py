@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Utils for customed ops for video ssl."""
 
 import functools
 from typing import Optional
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def random_apply(func, p, x):
@@ -400,7 +399,7 @@ def sample_ssl_sequence(sequence: tf.Tensor,
       offset=offset_2)
 
   indices = tf.concat([indices_1, indices_2], axis=0)
-  indices.set_shape((num_windows * num_steps,))
+  indices.set_shape((num_windows * num_steps,))  # pyrefly: ignore[unsupported-operation]
   output = tf.gather(sequence, indices)
 
   return output

@@ -1,12 +1,14 @@
 # Model Garden NLP Common Training Driver
 
-[train.py](https://github.com/tensorflow/models/blob/master/official/nlp/train.py) is the common training driver that supports multiple
+[train.py](https://github.com/tensorflow/models/blob/master/official/nlp/train.py)
+is the common training driver that supports multiple
 NLP tasks (e.g., pre-training, GLUE and SQuAD fine-tuning etc) and multiple
 models (e.g., BERT, ALBERT, MobileBERT etc).
 
 ## Experiment Configuration
 
-[train.py] is driven by configs defined by the [ExperimentConfig](https://github.com/tensorflow/models/blob/master/official/core/config_definitions.py)
+[train.py](https://github.com/tensorflow/models/blob/master/official/nlp/train.py)
+is driven by configs defined by the [ExperimentConfig](https://github.com/tensorflow/models/blob/master/official/core/config_definitions.py)
 including configurations for `task`, `trainer` and `runtime`. The pre-defined
 NLP related [ExperimentConfig](https://github.com/tensorflow/models/blob/master/official/core/config_definitions.py) can be found in
 [configs/experiment_configs.py](https://github.com/tensorflow/models/blob/master/official/nlp/configs/experiment_configs.py).
@@ -44,7 +46,7 @@ trains a BERT-base model on GLUE/MNLI-matched which is a sentence prediction
 task.
 
 ```shell
-PARAMS=runtime.distribution_strategy=mirrored  # Train no GPU
+PARAMS=runtime.distribution_strategy=mirrored  # Train on GPU
 PARAMS=${PARAMS},task.train_data.input_path=/path-to-your-training-data/
 
 python3 train.py \
@@ -78,7 +80,9 @@ setting `task.validation_data.input_path` in `PARAMS`.
 
 ## Run on Cloud TPUs
 
-Next, we will describe how to run the [train.py](https://github.com/tensorflow/models/blob/master/official/nlp/train.py) on Cloud TPUs.
+Next, we will describe how to run
+the [train.py](https://github.com/tensorflow/models/blob/master/official/nlp/train.py)
+on Cloud TPUs.
 
 ### Setup
 First, you need to create a `tf-nightly` TPU with
@@ -96,72 +100,6 @@ git clone https://github.com/tensorflow/models.git
 export PYTHONPATH=$PYTHONPATH:/path/to/models
 pip3 install --user -r official/requirements.txt
 ```
-
-### Fine-tuning Sentence Classification with BERT from TF-Hub
-
-This example fine-tunes BERT-base from TF-Hub on the the Multi-Genre Natural
-Language Inference (MultiNLI) corpus using TPUs.
-
-Firstly, you can prepare the fine-tuning data using
-[`create_finetuning_data.py`](https://github.com/tensorflow/models/blob/master/official/nlp/data/create_finetuning_data.py) script.
-For GLUE tasks, you can (1) download the
-[GLUE data](https://gluebenchmark.com/tasks) by running
-[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
-and unpack it to some directory `$GLUE_DIR`, (2) prepare the vocabulary file,
-and (3) run the following command:
-
-```shell
-export GLUE_DIR=~/glue
-export VOCAB_FILE=~/uncased_L-12_H-768_A-12/vocab.txt
-
-export TASK_NAME=MNLI
-export OUTPUT_DATA_DIR=gs://some_bucket/datasets
-python3 data/create_finetuning_data.py \
- --input_data_dir=${GLUE_DIR}/${TASK_NAME}/ \
- --vocab_file=${VOCAB_FILE} \
- --train_data_output_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_train.tf_record \
- --eval_data_output_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_eval.tf_record \
- --meta_data_file_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_meta_data \
- --fine_tuning_task_type=classification --max_seq_length=128 \
- --classification_task_name=${TASK_NAME}
-```
-
-Resulting training and evaluation datasets in `tf_record` format will be later
-passed to [train.py](train.py). We will support to read dataset from
-tensorflow_datasets (TFDS) and use tf.text for pre-processing soon.
-
-Then you can execute the following commands to start the training and evaluation
-job.
-
-```shell
-export INPUT_DATA_DIR=gs://some_bucket/datasets
-export OUTPUT_DIR=gs://some_bucket/my_output_dir
-
-# See tfhub BERT collection for more tfhub models:
-# https://tfhub.dev/google/collections/bert/1
-export BERT_HUB_URL=https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3
-
-# Override the configurations by FLAGS. Alternatively, you can directly edit
-# `configs/experiments/glue_mnli_matched.yaml` to specify corresponding fields.
-export PARAMS=task.train_data.input_path=$INPUT_DATA_DIR/mnli_train.tf_record
-export PARAMS=$PARAMS,task.validation_data.input_path=$INPUT_DATA_DIR/mnli_eval.tf_record
-export PARAMS=$PARAMS,task.hub_module_url=$BERT_HUB_URL
-export PARAMS=$PARAMS,runtime.distribution_strategy=tpu
-
-python3 train.py \
- --experiment=bert/sentence_prediction \
- --mode=train_and_eval \
- --model_dir=$OUTPUT_DIR \
- --config_file=configs/models/bert_en_uncased_base.yaml \
- --config_file=configs/experiments/glue_mnli_matched.yaml \
- --tfhub_cache_dir=$OUTPUT_DIR/hub_cache \
- --tpu=${TPU_NAME} \
- --params_override=$PARAMS
-
-```
-
-You can monitor the training progress in the console and find the output
-models in `$OUTPUT_DIR`.
 
 ### Fine-tuning SQuAD with a pre-trained BERT checkpoint
 
@@ -219,4 +157,69 @@ python3 train.py \
 
 ```
 
-Note: More examples about pre-training will come soon.
+### Fine-tuning Sentence Classification with BERT from TF-Hub
+
+
+
+This example fine-tunes BERT-base from TF-Hub on the Multi-Genre Natural
+Language Inference (MultiNLI) corpus using TPUs.
+
+Firstly, you can prepare the fine-tuning data using
+[`create_finetuning_data.py`](https://github.com/tensorflow/models/blob/master/official/nlp/data/create_finetuning_data.py) script.
+For GLUE tasks, you can (1) download the
+[GLUE data](https://gluebenchmark.com/tasks) by running
+[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
+and unpack it to some directory `$GLUE_DIR`, (2) prepare the vocabulary file,
+and (3) run the following command:
+
+```shell
+export GLUE_DIR=~/glue
+export VOCAB_FILE=~/uncased_L-12_H-768_A-12/vocab.txt
+
+export TASK_NAME=MNLI
+export OUTPUT_DATA_DIR=gs://some_bucket/datasets
+python3 data/create_finetuning_data.py \
+ --input_data_dir=${GLUE_DIR}/${TASK_NAME}/ \
+ --vocab_file=${VOCAB_FILE} \
+ --train_data_output_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_train.tf_record \
+ --eval_data_output_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_eval.tf_record \
+ --meta_data_file_path=${OUTPUT_DATA_DIR}/${TASK_NAME}_meta_data \
+ --fine_tuning_task_type=classification --max_seq_length=128 \
+ --classification_task_name=${TASK_NAME}
+```
+
+Resulting training and evaluation datasets in `tf_record` format will be later
+passed to [train.py](train.py).
+
+Then you can execute the following commands to start the training and evaluation
+job.
+
+```shell
+export INPUT_DATA_DIR=gs://some_bucket/datasets
+export OUTPUT_DIR=gs://some_bucket/my_output_dir
+
+# See tfhub BERT collection for more tfhub models:
+# https://tfhub.dev/google/collections/bert/1
+export BERT_HUB_URL=https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3
+
+# Override the configurations by FLAGS. Alternatively, you can directly edit
+# `configs/experiments/glue_mnli_matched.yaml` to specify corresponding fields.
+export PARAMS=task.train_data.input_path=$INPUT_DATA_DIR/mnli_train.tf_record
+export PARAMS=$PARAMS,task.validation_data.input_path=$INPUT_DATA_DIR/mnli_eval.tf_record
+export PARAMS=$PARAMS,task.hub_module_url=$BERT_HUB_URL
+export PARAMS=$PARAMS,runtime.distribution_strategy=tpu
+
+python3 train.py \
+ --experiment=bert/sentence_prediction \
+ --mode=train_and_eval \
+ --model_dir=$OUTPUT_DIR \
+ --config_file=configs/models/bert_en_uncased_base.yaml \
+ --config_file=configs/experiments/glue_mnli_matched.yaml \
+ --tfhub_cache_dir=$OUTPUT_DIR/hub_cache \
+ --tpu=${TPU_NAME} \
+ --params_override=$PARAMS
+
+```
+
+You can monitor the training progress in the console and find the output
+models in `$OUTPUT_DIR`.

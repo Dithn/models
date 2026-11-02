@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,17 @@
 
 """Export module for BASNet."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.basnet.tasks import basnet
-from official.vision.beta.serving import semantic_segmentation
-
-
-MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
-STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
+from official.vision.serving import semantic_segmentation
 
 
 class BASNetModule(semantic_segmentation.SegmentationModule):
   """BASNet Module."""
 
   def _build_model(self):
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[self._batch_size] + self._input_image_size + [3])
 
     return basnet.build_basnet_model(

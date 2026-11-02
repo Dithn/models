@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Backbones configurations."""
 import dataclasses
 from typing import Optional, Sequence
@@ -39,4 +38,4 @@ class Backbone(hyperparams.OneOfConfig):
     unet_3d: UNet3D backbone config.
   """
   type: Optional[str] = None
-  unet_3d: UNet3D = UNet3D()
+  unet_3d: UNet3D = dataclasses.field(default_factory=UNet3D)

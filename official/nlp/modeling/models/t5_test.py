@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
@@ -44,6 +44,10 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
   @parameterized.named_parameters(("bfloat16", tf.bfloat16),
                                   ("float32", tf.float32))
   def test_embed(self, dtype):
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+    self.addCleanup(
+        tf.config.experimental.enable_tensor_float_32_execution, True
+    )
     l = t5.Embed(vocab_size=5, features=4, compute_dtype=dtype, name="foo")
     inputs = np.array([[2, 3], [1, 2]], dtype=np.int32)
     inputs = tf.convert_to_tensor(inputs)
@@ -62,7 +66,7 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
         features=4,
         compute_dtype=dtype,
         name="foo",
-        embeddings_initializer=tf.keras.initializers.Zeros())
+        embeddings_initializer=tf_keras.initializers.Zeros())
     self.assertAllClose(l(inputs), tf.zeros((2, 2, 4), dtype))
 
   @parameterized.named_parameters(("bfloat16", tf.bfloat16),
@@ -82,7 +86,7 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
     l = t5.Linear(
         in_features=4,
         out_features=4,
-        w_init=tf.keras.initializers.Ones(),
+        w_init=tf_keras.initializers.Ones(),
         name="foo")
     inputs = tf.ones((2, 4), dtype=dtype)
     outputs = l(inputs)
@@ -97,7 +101,7 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
         out_features=4,
         num_heads=2,
         to_3d=True,
-        w_init=tf.keras.initializers.Ones(),
+        w_init=tf_keras.initializers.Ones(),
         name="foo")
     inputs = np.ones((batch_size, 2, 4), dtype=np.float32)
     self.assertEqual(l(inputs).shape, (batch_size, 2, 2, 4))
@@ -107,7 +111,7 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
         out_features=4,
         num_heads=2,
         to_3d=False,
-        w_init=tf.keras.initializers.Ones(),
+        w_init=tf_keras.initializers.Ones(),
         name="foo")
     inputs = np.ones((batch_size, 2, 2, 2), dtype=np.float32)
     self.assertEqual(l(inputs).shape, (batch_size, 2, 4))
@@ -140,14 +144,14 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
     l = t5.RelativePositionEmbedding(
         num_heads=4,
         bidirectional=False,
-        embeddings_initializer=tf.keras.initializers.Ones(),
+        embeddings_initializer=tf_keras.initializers.Ones(),
         compute_dtype=dtype,
         name="foo")
     self.assertEqual(l(4, 2).shape, (1, 4, 4, 2))
     l = t5.RelativePositionEmbedding(
         num_heads=4,
         bidirectional=True,
-        embeddings_initializer=tf.keras.initializers.Ones(),
+        embeddings_initializer=tf_keras.initializers.Ones(),
         compute_dtype=dtype,
         name="bar")
     outputs = l(4, 2)
@@ -172,7 +176,7 @@ class ModulesTest(tf.test.TestCase, parameterized.TestCase):
     pos_embed = t5.RelativePositionEmbedding(
         num_heads=4,
         bidirectional=False,
-        embeddings_initializer=tf.keras.initializers.Ones(),
+        embeddings_initializer=tf_keras.initializers.Ones(),
         name="pos_embed")
     position_bias = pos_embed(from_seq_length, from_seq_length)
     l = t5.MultiHeadAttention(d_model=4, d_kv=2, num_heads=4, dropout_rate=0.1)
@@ -234,7 +238,7 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
       pos_embed = t5.RelativePositionEmbedding(
           num_heads=head_size,
           bidirectional=False,
-          embeddings_initializer=tf.keras.initializers.Ones(),
+          embeddings_initializer=tf_keras.initializers.Ones(),
           name="pos_embed")
       l = t5.SelfAttention(
           d_model=4, d_kv=head_size, num_heads=num_heads, dropout_rate=0.1)
@@ -302,7 +306,7 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     pos_embed = t5.RelativePositionEmbedding(
         num_heads=2,
         bidirectional=True,
-        embeddings_initializer=tf.keras.initializers.Ones(),
+        embeddings_initializer=tf_keras.initializers.Ones(),
         name="bar")
     attention_mask = t5.make_attention_mask(
         tf.ones((batch_size, from_seq_length)),
@@ -322,7 +326,7 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     pos_embed = t5.RelativePositionEmbedding(
         num_heads=2,
         bidirectional=True,
-        embeddings_initializer=tf.keras.initializers.Ones(),
+        embeddings_initializer=tf_keras.initializers.Ones(),
         name="bar")
     encoder_decoder_mask = t5.make_attention_mask(
         tf.ones((batch_size, from_seq_length)),
@@ -348,11 +352,35 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
         num_heads=4,
         d_ff=16,
         vocab_size=10,
-        vocab_embeddings_initializer=tf.keras.initializers.Ones(),
-        relative_embeddings_initializer=tf.keras.initializers.Ones())
+        vocab_embeddings_initializer=tf_keras.initializers.Ones(),
+        relative_embeddings_initializer=tf_keras.initializers.Ones())
     encoder = t5.Encoder(config, compute_dtype=dtype)
     encoded = encoder(tf.zeros((4, 8), dtype=tf.int32))
     self.assertEqual(encoded.shape, (4, 8, config.d_model))
+
+  @parameterized.named_parameters(("return_score", True),
+                                  ("not_return_score", False))
+  def test_encoder_att_scores(self, return_attention_scores):
+    config = t5.T5TransformerParams(
+        num_layers=2,
+        d_model=4,
+        d_kv=3,
+        num_heads=4,
+        d_ff=16,
+        vocab_size=10,
+        vocab_embeddings_initializer=tf_keras.initializers.Ones(),
+        relative_embeddings_initializer=tf_keras.initializers.Ones(),
+        return_attention_scores=return_attention_scores)
+    encoder = t5.Encoder(config, compute_dtype=tf.float32)
+    encoded = encoder(tf.zeros((4, 8), dtype=tf.int32))
+    if return_attention_scores:
+      encoded, scores = encoded
+      self.assertEqual(encoded.shape, (4, 8, config.d_model))
+      self.assertIsNotNone(scores)
+      self.assertLen(scores, 2)
+      self.assertEqual(scores[0].shape, (4, 4, 8, 8))
+    else:
+      self.assertEqual(encoded.shape, (4, 8, config.d_model))
 
   @parameterized.named_parameters(("bfloat16", tf.bfloat16),
                                   ("float32", tf.float32))
@@ -364,8 +392,8 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
         num_heads=4,
         d_ff=16,
         vocab_size=10,
-        vocab_embeddings_initializer=tf.keras.initializers.Ones(),
-        relative_embeddings_initializer=tf.keras.initializers.Ones())
+        vocab_embeddings_initializer=tf_keras.initializers.Ones(),
+        relative_embeddings_initializer=tf_keras.initializers.Ones())
     encoder = t5.Encoder(config, compute_dtype=dtype)
     encoded = encoder(
         tf.zeros((4, 8), dtype=tf.int32),
@@ -382,8 +410,8 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
         num_heads=4,
         d_ff=16,
         vocab_size=10,
-        vocab_embeddings_initializer=tf.keras.initializers.Ones(),
-        relative_embeddings_initializer=tf.keras.initializers.Ones())
+        vocab_embeddings_initializer=tf_keras.initializers.Ones(),
+        relative_embeddings_initializer=tf_keras.initializers.Ones())
     encoder = t5.Encoder(config, compute_dtype=dtype)
     encoded = encoder(dense_inputs=tf.ones((4, 2, 4), dtype=dtype))
     self.assertEqual(encoded.shape, (4, 2, config.d_model))
@@ -397,13 +425,14 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
         num_heads=4,
         d_ff=16,
         vocab_size=10,
-        vocab_embeddings_initializer=tf.keras.initializers.Ones(),
-        relative_embeddings_initializer=tf.keras.initializers.Ones())
+        vocab_embeddings_initializer=tf_keras.initializers.Ones(),
+        relative_embeddings_initializer=tf_keras.initializers.Ones())
     decoder = t5.Decoder(config)
     batch_size = 4
     targets = tf.zeros((4, 8), dtype=tf.int32)
     encoded = tf.zeros((4, 8, config.d_model), dtype=tf.float32)
-    logits, cache = decoder(targets, encoded)
+    outputs = decoder(targets, encoded)
+    logits = outputs["logits"]
     self.assertEqual(logits.shape, (4, 8, config.vocab_size))
 
     cache = {}
@@ -412,13 +441,15 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     cache[1] = _create_cache(batch_size, max_decode_len, config.num_heads,
                              config.d_kv)
     targets = tf.zeros((4, 1), dtype=tf.int32)
-    logits, cache = decoder(
+    outputs = decoder(
         targets,
         encoded,
         decode_position=2,
         cache=cache,
         decode=True,
         max_decode_len=max_decode_len)
+    logits = outputs["logits"]
+    cache = outputs["cache"]
     self.assertEqual(logits.shape, (batch_size, 1, config.vocab_size))
     for entry in cache.values():
       for tensor in entry.values():
@@ -476,11 +507,66 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     self.assertEqual(outputs["logits"].shape,
                      (batch_size, 1, config.vocab_size))
     for v in transformer.trainable_variables:
-      print(v.name, v.shape)
+      self.assertEqual(v.dtype, tf.float32)
+
+  def test_transformer_return_attn_scores(self):
+    max_decode_len = 10
+    config = t5.T5TransformerParams(
+        num_layers=1,
+        d_model=8,
+        d_kv=4,
+        num_heads=4,
+        d_ff=32,
+        vocab_size=10,
+        shared_embedding=True,
+        layer_sharing=False,
+        ffn_activations=("relu",),
+        logits_via_embedding=True,
+        return_attention_scores=True,
+    )
+    transformer = t5.T5Transformer(config, compute_dtype=tf.float32)
+    self.assertLen(transformer.trainable_variables, 26)
+    inputs = tf.convert_to_tensor(
+        np.array([[2, 2, 1, 3, 1, 0], [3, 3, 1, 2, 2, 1]])
+    )
+    segments = tf.convert_to_tensor(
+        np.array([[1, 1, 1, 2, 2, 0], [1, 1, 1, 2, 2, 2]])
+    )
+
+    outputs = transformer(
+        encoder_input_tokens=inputs,
+        decoder_input_tokens=inputs,
+        decoder_target_tokens=inputs,
+        encoder_segment_ids=segments,
+        decoder_segment_ids=segments,
+    )
+    self.assertIn("attention_scores", outputs)
+    self.assertLen(outputs["attention_scores"], 1)
+    self.assertEqual(outputs["attention_scores"][0].shape, (2, 4, 6, 6))
+    cache = {}
+    batch_size = 2
+    cache[0] = _create_cache(
+        batch_size,
+        max_decode_len,
+        config.num_heads,
+        config.d_kv,
+        dtype=tf.float32,
+    )
+    outputs = transformer.decode(
+        encoder_input_tokens=inputs,
+        encoded=outputs["encoded"],
+        decoder_target_tokens=tf.ones((batch_size, 1), dtype=tf.int32),
+        decode_position=1,
+        decode=True,
+        max_decode_len=max_decode_len,
+        cache=cache)
+    self.assertEqual(outputs["logits"].shape,
+                     (batch_size, 1, config.vocab_size))
+    for v in transformer.trainable_variables:
       self.assertEqual(v.dtype, tf.float32)
 
   @parameterized.named_parameters(
-      ("t5_10", ("relu",), True, 26, False, tf.float32),)
+      ("t5_10_dense", ("relu",), True, 26, False, tf.float32),)
   def test_transformer_with_dense(self, ffn_activations, logits_via_embedding,
                                   expect_num_variables, layer_sharing, dtype):
     max_decode_len = 10
@@ -496,6 +582,7 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
         ffn_activations=ffn_activations,
         logits_via_embedding=logits_via_embedding)
     transformer = t5.T5Transformer(config, compute_dtype=dtype)
+
     self.assertLen(transformer.trainable_variables, expect_num_variables)
     inputs = tf.convert_to_tensor(
         np.array([[2, 2, 1, 3, 1, 0], [3, 3, 1, 2, 2, 1]]))
@@ -528,7 +615,74 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     self.assertEqual(outputs["logits"].shape,
                      (batch_size, 1, config.vocab_size))
     for v in transformer.trainable_variables:
-      print(v.name, v.shape)
+      self.assertEqual(v.dtype, tf.float32)
+
+  @parameterized.named_parameters(
+      ("t5_10_dense_layerwise_relpos",
+       ("relu",), True, 26, False, tf.float32, False, 1),
+      ("t5_10_dense_shared_relpos_d2",
+       ("relu",), True, 39, False, tf.float32, True, 2),
+      ("t5_10_dense_layerwise_relpos_d2",
+       ("relu",), True, 40, False, tf.float32, False, 2),
+  )
+  def test_transformer_with_lw_relpos(self, ffn_activations,
+                                      logits_via_embedding,
+                                      expect_num_variables, layer_sharing,
+                                      dtype, use_shared_relpos,
+                                      num_decoder_layers):
+    max_decode_len = 10
+    config = t5.T5TransformerParams(
+        num_layers=1,
+        num_decoder_layers=num_decoder_layers,
+        d_model=8,
+        d_kv=4,
+        num_heads=4,
+        d_ff=32,
+        vocab_size=10,
+        shared_embedding=True,
+        layer_sharing=layer_sharing,
+        ffn_activations=ffn_activations,
+        logits_via_embedding=logits_via_embedding,
+        use_shared_relative_position_bias=use_shared_relpos)
+    transformer = t5.T5Transformer(config, compute_dtype=dtype)
+
+    self.assertLen(transformer.trainable_variables, expect_num_variables)
+    inputs = tf.convert_to_tensor(
+        np.array([[2, 2, 1, 3, 1, 0], [3, 3, 1, 2, 2, 1]]))
+    segments = tf.convert_to_tensor(
+        np.array([[1, 1, 1, 2, 2, 0], [1, 1, 1, 2, 2, 2]]))
+
+    dense_inputs = tf.convert_to_tensor(np.random.randn(2, 2, 8), dtype=dtype)
+    dense_segments = tf.convert_to_tensor(np.array([[1, 2], [1, 2]]))
+    outputs = transformer(
+        encoder_input_tokens=inputs,
+        encoder_dense_inputs=dense_inputs,
+        decoder_input_tokens=inputs,
+        decoder_target_tokens=inputs,
+        encoder_segment_ids=segments,
+        encoder_dense_segment_ids=dense_segments,
+        decoder_segment_ids=segments)
+    cache = {}
+    batch_size = 2
+    for i in range(num_decoder_layers):
+      cache[i] = _create_cache(
+          batch_size,
+          max_decode_len,
+          config.num_heads,
+          config.d_kv,
+          dtype=dtype)
+    outputs = transformer.decode(
+        encoder_input_tokens=inputs,
+        encoder_dense_inputs=dense_inputs,
+        encoded=outputs["encoded"],
+        decoder_target_tokens=tf.ones((batch_size, 1), dtype=tf.int32),
+        decode_position=1,
+        decode=True,
+        max_decode_len=max_decode_len,
+        cache=cache)
+    self.assertEqual(outputs["logits"].shape,
+                     (batch_size, 1, config.vocab_size))
+    for v in transformer.trainable_variables:
       self.assertEqual(v.dtype, tf.float32)
 
   @parameterized.named_parameters(
@@ -580,7 +734,6 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     self.assertEqual(outputs["logits"].shape,
                      (batch_size, 1, config.vocab_size))
     for v in transformer.trainable_variables:
-      print(v.name, v.shape)
       self.assertEqual(v.dtype, tf.float32)
 
   @parameterized.named_parameters(
@@ -635,7 +788,6 @@ class T5Test(tf.test.TestCase, parameterized.TestCase):
     self.assertEqual(outputs["logits"].shape,
                      (batch_size, 1, config.vocab_size))
     for v in transformer.trainable_variables:
-      print(v.name, v.shape)
       self.assertEqual(v.dtype, tf.float32)
 
 

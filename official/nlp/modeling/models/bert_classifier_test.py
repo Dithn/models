@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,18 +15,14 @@
 """Tests for BERT trainer network."""
 
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.nlp.modeling import layers
 from official.nlp.modeling import networks
 from official.nlp.modeling.models import bert_classifier
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class BertClassifierTest(keras_parameterized.TestCase):
+class BertClassifierTest(tf.test.TestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(('single_cls', 1, False), ('3_cls', 3, False),
                                   ('3_cls_dictoutputs', 3, True))
@@ -43,9 +39,9 @@ class BertClassifierTest(keras_parameterized.TestCase):
         test_network, num_classes=num_classes)
 
     # Create a set of 2-dimensional inputs (the first dimension is implicit).
-    word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    word_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    mask = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    type_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
 
     # Invoke the trainer model on the inputs. This causes the layer to be built.
     cls_outs = bert_trainer_model([word_ids, mask, type_ids])

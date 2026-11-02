@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
 
 """Run masked LM/next sentence pre-training for BERT in TF 2.x."""
 
-# Import libraries
 from absl import app
 from absl import flags
 from absl import logging
 import gin
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.common import distribute_utils
 from official.legacy.bert import bert_models
 from official.legacy.bert import common_flags
@@ -63,7 +62,7 @@ def get_pretrain_dataset_fn(input_file_pattern, seq_length,
   def _dataset_fn(ctx=None):
     """Returns tf.data.Dataset for distributed BERT pretraining."""
     input_patterns = input_file_pattern.split(',')
-    batch_size = ctx.get_per_replica_batch_size(global_batch_size)
+    batch_size = ctx.get_per_replica_batch_size(global_batch_size)  # pyrefly: ignore[missing-attribute]
     train_dataset = input_pipeline.create_pretrain_dataset(
         input_patterns,
         seq_length,

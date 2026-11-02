@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,14 +17,15 @@
 
 import collections
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
+from official.modeling import tf_utils
 from official.nlp.modeling import layers
 from official.projects.roformer import roformer_encoder_block
 
 
-@tf.keras.utils.register_keras_serializable(package='Text')
-class RoformerEncoder(tf.keras.Model):
+@tf_keras.utils.register_keras_serializable(package='Text')
+class RoformerEncoder(tf_keras.Model):
   """Bi-directional Transformer-based encoder network with Roformer.
 
   Roformer paper: https://arxiv.org/abs/2104.09864
@@ -76,10 +77,10 @@ class RoformerEncoder(tf.keras.Model):
       max_sequence_length=512,
       type_vocab_size=16,
       inner_dim=3072,
-      inner_activation=lambda x: tf.keras.activations.gelu(x, approximate=True),
+      inner_activation=lambda x: tf_keras.activations.gelu(x, approximate=True),
       output_dropout=0.1,
       attention_dropout=0.1,
-      initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
+      initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02),
       output_range=None,
       embedding_width=None,
       embedding_layer=None,
@@ -98,14 +99,14 @@ class RoformerEncoder(tf.keras.Model):
       attention_dropout = kwargs['attention_dropout_rate']
       del kwargs['attention_dropout_rate']
 
-    activation = tf.keras.activations.get(inner_activation)
-    initializer = tf.keras.initializers.get(initializer)
+    activation = tf_keras.activations.get(inner_activation)
+    initializer = tf_keras.initializers.get(initializer)
 
-    word_ids = tf.keras.layers.Input(
+    word_ids = tf_keras.layers.Input(
         shape=(None,), dtype=tf.int32, name='input_word_ids')
-    mask = tf.keras.layers.Input(
+    mask = tf_keras.layers.Input(
         shape=(None,), dtype=tf.int32, name='input_mask')
-    type_ids = tf.keras.layers.Input(
+    type_ids = tf_keras.layers.Input(
         shape=(None,), dtype=tf.int32, name='input_type_ids')
 
     if embedding_width is None:
@@ -115,7 +116,7 @@ class RoformerEncoder(tf.keras.Model):
       embedding_layer_inst = layers.on_device_embedding.OnDeviceEmbedding(
           vocab_size=vocab_size,
           embedding_width=embedding_width,
-          initializer=initializer,
+          initializer=tf_utils.clone_initializer(initializer),
           name='word_embeddings')
     else:
       embedding_layer_inst = embedding_layer
@@ -125,28 +126,28 @@ class RoformerEncoder(tf.keras.Model):
     type_embedding_layer = layers.on_device_embedding.OnDeviceEmbedding(
         vocab_size=type_vocab_size,
         embedding_width=embedding_width,
-        initializer=initializer,
+        initializer=tf_utils.clone_initializer(initializer),
         use_one_hot=True,
         name='type_embeddings')
     type_embeddings = type_embedding_layer(type_ids)
 
     # Roformer does not have absolute position embedding
-    embeddings = tf.keras.layers.Add()([word_embeddings, type_embeddings])
+    embeddings = tf_keras.layers.Add()([word_embeddings, type_embeddings])
 
-    embedding_norm_layer = tf.keras.layers.LayerNormalization(
+    embedding_norm_layer = tf_keras.layers.LayerNormalization(
         name='embeddings/layer_norm', axis=-1, epsilon=1e-12, dtype=tf.float32)
 
     embeddings = embedding_norm_layer(embeddings)
-    embeddings = (tf.keras.layers.Dropout(rate=output_dropout)(embeddings))
+    embeddings = (tf_keras.layers.Dropout(rate=output_dropout)(embeddings))
 
     # We project the 'embedding' output to 'hidden_size' if it is not already
     # 'hidden_size'.
     if embedding_width != hidden_size:
-      embedding_projection = tf.keras.layers.experimental.EinsumDense(
+      embedding_projection = tf_keras.layers.EinsumDense(
           '...x,xy->...y',
           output_shape=hidden_size,
           bias_axes='y',
-          kernel_initializer=initializer,
+          kernel_initializer=tf_utils.clone_initializer(initializer),
           name='embedding_projection')
       embeddings = embedding_projection(embeddings)
     else:
@@ -171,7 +172,7 @@ class RoformerEncoder(tf.keras.Model):
           attention_dropout=attention_dropout,
           norm_first=norm_first,
           output_range=transformer_output_range,
-          kernel_initializer=initializer,
+          kernel_initializer=tf_utils.clone_initializer(initializer),
           name='roformer/layer_%d' % i)
       transformer_layers.append(layer)
       data = layer([data, attention_mask])
@@ -182,10 +183,10 @@ class RoformerEncoder(tf.keras.Model):
     # like this will create a SliceOpLambda layer. This is better than a Lambda
     # layer with Python code, because that is fundamentally less portable.
     first_token_tensor = last_encoder_output[:, 0, :]
-    pooler_layer = tf.keras.layers.Dense(
+    pooler_layer = tf_keras.layers.Dense(
         units=hidden_size,
         activation='tanh',
-        kernel_initializer=initializer,
+        kernel_initializer=tf_utils.clone_initializer(initializer),
         name='pooler_transform')
     cls_output = pooler_layer(first_token_tensor)
 
@@ -212,10 +213,10 @@ class RoformerEncoder(tf.keras.Model):
         'max_sequence_length': max_sequence_length,
         'type_vocab_size': type_vocab_size,
         'inner_dim': inner_dim,
-        'inner_activation': tf.keras.activations.serialize(activation),
+        'inner_activation': tf_keras.activations.serialize(activation),
         'output_dropout': output_dropout,
         'attention_dropout': attention_dropout,
-        'initializer': tf.keras.initializers.serialize(initializer),
+        'initializer': tf_keras.initializers.serialize(initializer),
         'output_range': output_range,
         'embedding_width': embedding_width,
         'embedding_layer': embedding_layer,
@@ -227,7 +228,7 @@ class RoformerEncoder(tf.keras.Model):
     # the config dict attribute. TF does not track immutable attrs which
     # do not contain Trackables, so by creating a config namedtuple instead of
     # a dict we avoid tracking it.
-    config_cls = collections.namedtuple('Config', config_dict.keys())
+    config_cls = collections.namedtuple('Config', config_dict.keys())  # pyrefly: ignore[bad-class-definition]
     self._config = config_cls(**config_dict)
     self._pooler_layer = pooler_layer
     self._transformer_layers = transformer_layers

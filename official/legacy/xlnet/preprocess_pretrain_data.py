@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import json
 import os
 import random
 
-# Import libraries
 from absl import app
 from absl import flags
 from absl import logging
@@ -129,7 +128,7 @@ def _create_data(idx, input_paths):
       continue
 
     input_data = np.array(input_data, dtype=np.int64)
-    sent_ids = np.array(sent_ids, dtype=np.bool)
+    sent_ids = np.array(sent_ids, dtype=bool)
 
     total_line_cnt += line_cnt
     input_shards.append((input_data, sent_ids))
@@ -348,7 +347,7 @@ def _is_start_piece(piece):
 def _sample_mask(sp, seg, reverse=False, max_gram=5, goal_num_predict=None):
   """Samples `goal_num_predict` tokens for partial prediction."""
   seg_len = len(seg)
-  mask = np.array([False] * seg_len, dtype=np.bool)
+  mask = np.array([False] * seg_len, dtype=bool)
 
   num_predict = 0
 
@@ -411,7 +410,7 @@ def _sample_mask_ngram(sp, seg, reverse=False, max_gram=5,
   """Sample `goal_num_predict` tokens for partial prediction."""
 
   seg_len = len(seg)
-  mask = np.array([False] * seg_len, dtype=np.bool)
+  mask = np.array([False] * seg_len, dtype=bool)
 
   num_predict = 0
 
@@ -614,7 +613,7 @@ def _convert_example(example, use_bfloat16):
   """Cast int64 into int32 and float32 to bfloat16 if use_bfloat16."""
   for key in list(example.keys()):
     val = example[key]
-    if tf.keras.backend.is_sparse(val):
+    if tf_keras.backend.is_sparse(val):
       val = tf.sparse.to_dense(val)
     if val.dtype == tf.int64:
       val = tf.cast(val, tf.int32)

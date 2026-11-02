@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,20 +16,18 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.projects.roformer import roformer_encoder_block
 
 
-@keras_parameterized.run_all_keras_modes
 @parameterized.named_parameters(
     ('base', roformer_encoder_block.RoformerEncoderBlock))
-class RoformerEncoderBlockTest(keras_parameterized.TestCase):
+class RoformerEncoderBlockTest(tf.test.TestCase, parameterized.TestCase):
 
   def tearDown(self):
     super(RoformerEncoderBlockTest, self).tearDown()
-    tf.keras.mixed_precision.set_global_policy('float32')
+    tf_keras.mixed_precision.set_global_policy('float32')
 
   def test_layer_creation(self, transformer_cls):
     test_layer = transformer_cls(
@@ -37,7 +35,7 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
@@ -48,9 +46,9 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
@@ -61,11 +59,11 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(data_tensor)
 
     # Create a model from the test layer.
-    model = tf.keras.Model(data_tensor, output_tensor)
+    model = tf_keras.Model(data_tensor, output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -80,13 +78,13 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
 
     # Create a model from the test layer.
-    model = tf.keras.Model([data_tensor, mask_tensor], output_tensor)
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -184,19 +182,19 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
         new_output_tensor, output_tensor[:, 0:1, :], atol=5e-5, rtol=0.003)
 
   def test_layer_invocation_with_float16_dtype(self, transformer_cls):
-    tf.keras.mixed_precision.set_global_policy('mixed_float16')
+    tf_keras.mixed_precision.set_global_policy('mixed_float16')
     test_layer = transformer_cls(
         num_attention_heads=10, inner_dim=2048, inner_activation='relu')
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     # Create a 2-dimensional input (the first dimension is implicit).
-    mask_tensor = tf.keras.Input(shape=(sequence_length, sequence_length))
+    mask_tensor = tf_keras.Input(shape=(sequence_length, sequence_length))
     output_tensor = test_layer([data_tensor, mask_tensor])
 
     # Create a model from the test layer.
-    model = tf.keras.Model([data_tensor, mask_tensor], output_tensor)
+    model = tf_keras.Model([data_tensor, mask_tensor], output_tensor)
 
     # Invoke the model on test data. We can't validate the output data itself
     # (the NN is too complex) but this will rule out structural runtime errors.
@@ -214,11 +212,11 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
         num_attention_heads=10,
         inner_dim=2048,
         inner_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     sequence_length = 21
     width = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(sequence_length, width))
+    data_tensor = tf_keras.Input(shape=(sequence_length, width))
     output = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output.shape.as_list())
@@ -228,7 +226,7 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
         num_attention_heads=2,
         inner_dim=128,
         inner_activation='relu',
-        kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02))
+        kernel_initializer=tf_keras.initializers.TruncatedNormal(stddev=0.02))
     # Forward path.
     q_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
     kv_tensor = tf.zeros([2, 8, 16], dtype=tf.float32)
@@ -238,8 +236,7 @@ class RoformerEncoderBlockTest(keras_parameterized.TestCase):
     self.assertEqual(output.shape, q_tensor.shape)
 
 
-@keras_parameterized.run_all_keras_modes
-class RoformerArgumentTest(keras_parameterized.TestCase):
+class RoformerArgumentTest(tf.test.TestCase, parameterized.TestCase):
 
   def test_raises(self):
     num_attention_heads = 2
@@ -254,7 +251,7 @@ class RoformerArgumentTest(keras_parameterized.TestCase):
           norm_first=True,
           norm_epsilon=1e-6,
           inner_dropout=0.1,
-          attention_initializer=tf.keras.initializers.RandomUniform(
+          attention_initializer=tf_keras.initializers.RandomUniform(
               minval=0., maxval=1.))
 
   def test_use_bias_norm_first(self):
@@ -270,7 +267,7 @@ class RoformerArgumentTest(keras_parameterized.TestCase):
         norm_first=True,
         norm_epsilon=1e-6,
         inner_dropout=0.1,
-        attention_initializer=tf.keras.initializers.RandomUniform(
+        attention_initializer=tf_keras.initializers.RandomUniform(
             minval=0., maxval=1.))
     # Forward path.
     dummy_tensor = tf.zeros([2, 4, 16], dtype=tf.float32)
@@ -291,7 +288,7 @@ class RoformerArgumentTest(keras_parameterized.TestCase):
         norm_first=True,
         norm_epsilon=1e-6,
         inner_dropout=0.1,
-        attention_initializer=tf.keras.initializers.RandomUniform(
+        attention_initializer=tf_keras.initializers.RandomUniform(
             minval=0., maxval=1.))
     encoder_block_config = encoder_block.get_config()
     new_encoder_block = roformer_encoder_block.RoformerEncoderBlock.from_config(
@@ -315,7 +312,7 @@ class RoformerArgumentTest(keras_parameterized.TestCase):
     seq_len = 21
     dimensions = 80
     # Create a 3-dimensional input (the first dimension is implicit).
-    data_tensor = tf.keras.Input(shape=(seq_len, dimensions))
+    data_tensor = tf_keras.Input(shape=(seq_len, dimensions))
     output_tensor = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())

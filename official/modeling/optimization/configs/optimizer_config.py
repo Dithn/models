@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class BaseOptimizerConfig(base_config.Config):
 class SGDConfig(BaseOptimizerConfig):
   """Configuration for SGD optimizer.
 
-  The attributes for this class matches the arguments of tf.keras.optimizer.SGD.
+  The attributes for this class matches the arguments of tf_keras.optimizer.SGD.
 
   Attributes:
     name: name of the optimizer.
@@ -61,7 +61,7 @@ class SGDExperimentalConfig(BaseOptimizerConfig):
   """Configuration for SGD optimizer.
 
   The attributes for this class matches the arguments of
-  `tf.keras.optimizer.experimental.SGD`.
+  `tf_keras.optimizer.experimental.SGD`.
 
   Attributes:
     name: name of the optimizer.
@@ -80,7 +80,7 @@ class RMSPropConfig(BaseOptimizerConfig):
   """Configuration for RMSProp optimizer.
 
   The attributes for this class matches the arguments of
-  tf.keras.optimizers.RMSprop.
+  tf_keras.optimizers.RMSprop.
 
   Attributes:
     name: name of the optimizer.
@@ -101,7 +101,7 @@ class AdagradConfig(BaseOptimizerConfig):
   """Configuration for Adagrad optimizer.
 
   The attributes of this class match the arguments of
-  tf.keras.optimizer.Adagrad.
+  tf_keras.optimizer.Adagrad.
 
   Attributes:
     name: name of the optimizer.
@@ -119,7 +119,7 @@ class AdamConfig(BaseOptimizerConfig):
   """Configuration for Adam optimizer.
 
   The attributes for this class matches the arguments of
-  tf.keras.optimizer.Adam.
+  tf_keras.optimizer.Adam.
 
   Attributes:
     name: name of the optimizer.
@@ -141,7 +141,7 @@ class AdamExperimentalConfig(BaseOptimizerConfig):
   """Configuration for experimental Adam optimizer.
 
   The attributes for this class matches the arguments of
-  `tf.keras.optimizer.experimental.Adam`.
+  `tf_keras.optimizer.experimental.Adam`.
 
   Attributes:
     name: name of the optimizer.
@@ -191,11 +191,36 @@ class AdamWeightDecayConfig(BaseOptimizerConfig):
 
 
 @dataclasses.dataclass
+class AdamWeightDecayExperimentalConfig(BaseOptimizerConfig):
+  """Configuration for Adam optimizer with weight decay.
+
+  Attributes:
+    name: name of the optimizer.
+    beta_1: decay rate for 1st order moments.
+    beta_2: decay rate for 2st order moments.
+    epsilon: epsilon value used for numerical stability in the optimizer.
+    amsgrad: boolean. Whether to apply AMSGrad variant of this algorithm from
+      the paper "On the Convergence of Adam and beyond".
+    weight_decay: float. Weight decay rate. Default to 0.
+    global_clipnorm: A positive float. Clips the gradients to this maximum
+      L2-norm. Default to 1.0.
+    jit_compile: if True, jit compile will be used.
+  """
+  name: str = "AdamWeightDecayExperimental"
+  beta_1: float = 0.9
+  beta_2: float = 0.999
+  epsilon: float = 1e-07
+  amsgrad: bool = False
+  weight_decay: float = 0.0
+  global_clipnorm: float = 1.0
+  jit_compile: bool = False
+
+
+@dataclasses.dataclass
 class LAMBConfig(BaseOptimizerConfig):
   """Configuration for LAMB optimizer.
 
-  The attributes for this class matches the arguments of
-  tensorflow_addons.optimizers.LAMB.
+  The attributes for this class matches the arguments of LAMB optimizer.
 
   Attributes:
     name: name of the optimizer.
@@ -311,3 +336,39 @@ class AdafactorConfig(BaseOptimizerConfig):
   min_dim_size_to_factor: int = 128
   epsilon1: float = 1e-30
   epsilon2: float = 1e-3
+  weight_decay: Optional[float] = None
+  include_in_weight_decay: Optional[str] = None
+
+
+@dataclasses.dataclass
+class AdafactorKerasConfig(BaseOptimizerConfig):
+  """Configuration for AdafactorKeras optimizer.
+
+  The attributes for this class matches the arguments of the Adafactor
+  implementation provided by keras.
+
+  Attributes:
+          learning_rate: Initial value for the learning rate: either a floating
+            point value, or a
+            `tf_keras.optimizers.schedules.LearningRateSchedule` instance.
+            Defaults to 0.001.
+        beta_2_decay: float, defaults to -0.8. The decay rate of `beta_2`.
+        epsilon_1: float, defaults to 1e-30. A small offset to keep denominator
+          away from 0.
+        epsilon_2: float, defaults to 1e-3. A small offset to avoid learning
+          rate becoming too small by time.
+        clip_threshold: float, defaults to 1.0. Clipping threshold. This is a
+          part of Adafactor algorithm, independent from `clipnorm`, `clipvalue`
+          and `global_clipnorm`.
+        relative_step: bool, defaults to True. If `learning_rate` is a constant
+          and `relative_step=True`, learning rate will be adjusted based on
+          current iterations. This is a default learning rate decay in
+          Adafactor.
+  """
+  name: str = "Adafactor"
+  learning_rate: float = 0.001
+  beta_2_decay: float = -0.8
+  epsilon_1: float = 1e-30
+  epsilon_2: float = 1e-3
+  clip_threshold: float = 1.0
+  relative_step: bool = True

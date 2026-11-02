@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,18 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Video classification input and model functions for serving/inference."""
 from typing import Mapping, Dict, Text
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.dataloaders import video_input
 from official.vision.serving import export_base
 from official.vision.tasks import video_classification
-
-MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
-STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
 
 
 class VideoClassificationModule(export_base.ExportModule):

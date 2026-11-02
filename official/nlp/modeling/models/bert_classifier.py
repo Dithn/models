@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
 """BERT cls-token classifier."""
 # pylint: disable=g-classes-have-attributes
 import collections
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.nlp.modeling import layers
 
 
-@tf.keras.utils.register_keras_serializable(package='Text')
-class BertClassifier(tf.keras.Model):
+@tf_keras.utils.register_keras_serializable(package='Text')
+class BertClassifier(tf_keras.Model):
   """Classifier model based on a BERT-style transformer-based encoder.
 
   This is an implementation of the network structure surrounding a transformer
@@ -79,7 +79,7 @@ class BertClassifier(tf.keras.Model):
         cls_inputs = outputs[1]
       else:
         cls_inputs = outputs['pooled_output']
-      cls_inputs = tf.keras.layers.Dropout(rate=dropout_rate)(cls_inputs)
+      cls_inputs = tf_keras.layers.Dropout(rate=dropout_rate)(cls_inputs)
     else:
       outputs = network(inputs)
       if isinstance(outputs, list):
@@ -117,7 +117,7 @@ class BertClassifier(tf.keras.Model):
     # the config dict attribute. TF does not track immutable attrs which
     # do not contain Trackables, so by creating a config namedtuple instead of
     # a dict we avoid tracking it.
-    config_cls = collections.namedtuple('Config', config_dict.keys())
+    config_cls = collections.namedtuple('Config', config_dict.keys())  # pyrefly: ignore[bad-class-definition]
     self._config = config_cls(**config_dict)
     self.classifier = classifier
 

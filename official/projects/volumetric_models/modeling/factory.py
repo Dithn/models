@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,8 @@
 # limitations under the License.
 
 """Factory methods to build models."""
-
-# Import libraries
-
-import tensorflow as tf
+from typing import Sequence, Union
+import tensorflow as tf, tf_keras
 
 from official.modeling import hyperparams
 from official.projects.volumetric_models.modeling.decoders import factory as decoder_factory
@@ -26,9 +24,11 @@ from official.vision.modeling.backbones import factory as backbone_factory
 
 
 def build_segmentation_model_3d(
-    input_specs: tf.keras.layers.InputSpec,
+    input_specs: Union[tf_keras.layers.InputSpec,
+                       Sequence[tf_keras.layers.InputSpec]],
     model_config: hyperparams.Config,
-    l2_regularizer: tf.keras.regularizers.Regularizer = None) -> tf.keras.Model:  # pytype: disable=annotation-type-mismatch  # typed-keras
+    l2_regularizer: tf_keras.regularizers.Regularizer = None  # pyrefly: ignore[bad-function-definition]
+) -> tf_keras.Model:  # pytype: disable=annotation-type-mismatch  # typed-keras
   """Builds Segmentation model."""
   norm_activation_config = model_config.norm_activation
   backbone = backbone_factory.build_backbone(

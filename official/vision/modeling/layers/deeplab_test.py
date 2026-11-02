@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,21 @@
 
 """Tests for ASPP."""
 
-import tensorflow as tf
+from absl.testing import parameterized
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized
 from official.vision.modeling.layers import deeplab
 
 
-@keras_parameterized.run_all_keras_modes
-class DeeplabTest(keras_parameterized.TestCase):
+class DeeplabTest(tf.test.TestCase, parameterized.TestCase):
 
-  @keras_parameterized.parameterized.parameters(
+  @parameterized.parameters(
       (None,),
       ([32, 32],),
       )
   def test_aspp(self, pool_kernel_size):
-    inputs = tf.keras.Input(shape=(64, 64, 128), dtype=tf.float32)
+    del pool_kernel_size
+    inputs = tf_keras.Input(shape=(64, 64, 128), dtype=tf.float32)
     layer = deeplab.SpatialPyramidPooling(output_channels=256,
                                           dilation_rates=[6, 12, 18],
                                           pool_kernel_size=None)
@@ -36,7 +36,7 @@ class DeeplabTest(keras_parameterized.TestCase):
     self.assertAllEqual([None, 64, 64, 256], output.shape)
 
   def test_aspp_invalid_shape(self):
-    inputs = tf.keras.Input(shape=(64, 64), dtype=tf.float32)
+    inputs = tf_keras.Input(shape=(64, 64), dtype=tf.float32)
     layer = deeplab.SpatialPyramidPooling(output_channels=256,
                                           dilation_rates=[6, 12, 18])
     with self.assertRaises(ValueError):

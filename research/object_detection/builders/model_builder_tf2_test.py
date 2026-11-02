@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,9 @@ import os
 import unittest
 
 from absl.testing import parameterized
+from google.protobuf import text_format
 import tensorflow.compat.v1 as tf
 
-from google.protobuf import text_format
 from object_detection.builders import model_builder
 from object_detection.builders import model_builder_test
 from object_detection.core import losses

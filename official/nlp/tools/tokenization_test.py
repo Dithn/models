@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import os
 import tempfile
 
 import six
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.nlp.tools import tokenization
 
@@ -150,6 +150,18 @@ class TokenizationTest(tf.test.TestCase):
 
     self.assertFalse(tokenization._is_punctuation(u"A"))
     self.assertFalse(tokenization._is_punctuation(u" "))
+
+  def test_preprocess_text(self):
+    self.assertEqual(tokenization.preprocess_text("hello world"), "hello world")
+    self.assertEqual(tokenization.preprocess_text(b"hello \xc3\xa9"), "hello e")
+    self.assertEqual(tokenization.preprocess_text(b"hello \xe9"), "hello e")
+    self.assertEqual(
+        tokenization.preprocess_text(b"hello  world", remove_space=True),
+        "hello world",
+    )
+    self.assertEqual(
+        tokenization.preprocess_text("Hello World", lower=True), "hello world"
+    )
 
 
 if __name__ == "__main__":

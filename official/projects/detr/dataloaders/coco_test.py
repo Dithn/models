@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 import tensorflow_datasets as tfds
 
 from official.projects.detr.dataloaders import coco
@@ -31,7 +31,7 @@ def _gen_fn():
       'image/id': np.random.randint(0, 100),
       'image/filename': 'test',
       'objects': {
-          'is_crowd': np.ones(shape=(num_boxes), dtype=np.bool),
+          'is_crowd': np.ones(shape=(num_boxes), dtype=bool),
           'bbox': np.ones(shape=(num_boxes, 4), dtype=np.float32),
           'label': np.ones(shape=(num_boxes), dtype=np.int64),
           'id': np.ones(shape=(num_boxes), dtype=np.int64),

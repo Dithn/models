@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 from typing import Any, Mapping, Optional
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import dataset_fn
 from official.core import config_definitions as cfg
@@ -99,7 +99,7 @@ class CustomSemanticSegmentationTask(
     return dataset
 
 
-class AutosegEdgeTPU(tf.keras.Model):
+class AutosegEdgeTPU(tf_keras.Model):
   """Segmentation keras network without pre/post-processing."""
 
   def __init__(self,
@@ -208,7 +208,7 @@ class AutosegEdgeTPU(tf.keras.Model):
         fullres_output=fullres_output,
         num_classes=num_classes)
 
-  def call(self, inputs, training):
+  def call(self, inputs, training):  # pyrefly: ignore[bad-override]
     # call backbone network.
     all_feats = self.backbone(inputs, training=training)
     if self.use_original_backbone_features:
@@ -232,7 +232,7 @@ class AutosegEdgeTPU(tf.keras.Model):
     return class_outputs
 
 
-def get_models() -> Mapping[str, tf.keras.Model]:
+def get_models() -> Mapping[str, tf_keras.Model]:
   """Returns the mapping from model type name to Keras model."""
   model_mapping = {}
 

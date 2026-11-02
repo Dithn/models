@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """Input pipelines."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def decode_record(record, name_to_features):
@@ -247,4 +247,4 @@ def get_input_dataset(input_file_pattern,
   if use_dataset_fn:
     return strategy.distribute_datasets_from_function(_dataset_fn)
   else:
-    return strategy.experimental_distribute_dataset(_dataset_fn())
+    return strategy.experimental_distribute_dataset(_dataset_fn())  # pyrefly: ignore[missing-attribute]

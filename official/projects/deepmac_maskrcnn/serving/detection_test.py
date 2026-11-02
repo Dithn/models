@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Test for image detection export lib."""
 
 import io
@@ -21,7 +20,7 @@ import os
 from absl.testing import parameterized
 import numpy as np
 from PIL import Image
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import exp_factory
 from official.projects.deepmac_maskrcnn.serving import detection

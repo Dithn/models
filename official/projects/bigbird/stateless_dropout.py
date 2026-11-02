@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import numbers
 from typing import Optional, Sequence, Text, Union
 
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def _as_shape(shape: Union[Sequence[int], tf.TensorShape]) -> tf.TensorShape:
@@ -104,7 +104,7 @@ def stateless_dropout(x: tf.Tensor,
       return x
 
     rate = tf.convert_to_tensor(rate, dtype=x.dtype, name='rate')
-    rate.shape.assert_has_rank(0)
+    rate.shape.assert_has_rank(0)  # pyrefly: ignore[missing-attribute]
     noise_shape = _get_noise_shape(x, noise_shape)
     # Sample a uniform distribution on [0.0, 1.0) and select values larger than
     # rate.

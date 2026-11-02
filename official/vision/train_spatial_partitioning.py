@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """TensorFlow Model Garden Vision training driver with spatial partitioning."""
 from typing import Sequence
 
@@ -20,7 +19,7 @@ from absl import app
 from absl import flags
 import gin
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import distribute_utils
 from official.common import flags as tfm_flags

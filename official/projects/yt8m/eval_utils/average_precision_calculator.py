@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ class AveragePrecisionCalculator(object):
       raise ValueError("the shape of predictions and actuals does not match.")
 
     if num_positives is not None:
-      if not isinstance(num_positives, numbers.Number) or num_positives < 0:
+      if not isinstance(num_positives, numbers.Number) or num_positives < 0:  # pyrefly: ignore[unsupported-operation]
         raise ValueError(
             "'num_positives' was provided but it was a negative number.")
 
@@ -268,6 +268,5 @@ class AveragePrecisionCalculator(object):
       The normalized prediction.
     """
     denominator = numpy.max(predictions) - numpy.min(predictions)
-    ret = (predictions - numpy.min(predictions)) / numpy.max(
-        denominator, epsilon)
+    ret = (predictions - numpy.min(predictions)) / max(denominator, epsilon)
     return ret

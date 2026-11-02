@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,17 +15,13 @@
 """Tests for dual encoder network."""
 
 from absl.testing import parameterized
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.nlp.modeling import networks
 from official.nlp.modeling.models import dual_encoder
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class DualEncoderTest(keras_parameterized.TestCase):
+class DualEncoderTest(tf.test.TestCase, parameterized.TestCase):
 
   @parameterized.parameters((192, 'logits'), (768, 'predictions'))
   def test_dual_encoder(self, hidden_size, output):
@@ -44,13 +40,13 @@ class DualEncoderTest(keras_parameterized.TestCase):
         test_network, max_seq_length=sequence_length, output=output)
 
     # Create a set of 2-dimensional inputs (the first dimension is implicit).
-    left_word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    left_mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    left_type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    left_word_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    left_mask = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    left_type_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
 
-    right_word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    right_mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    right_type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    right_word_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    right_mask = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    right_type_ids = tf_keras.Input(shape=(sequence_length,), dtype=tf.int32)
 
     if output == 'logits':
       outputs = dual_encoder_model([
@@ -72,6 +68,7 @@ class DualEncoderTest(keras_parameterized.TestCase):
   def test_dual_encoder_tensor_call(self, hidden_size, output):
     """Validate that the Keras object can be invoked."""
     # Build a transformer network to use within the dual encoder model.
+    del hidden_size
     sequence_length = 2
     test_network = networks.BertEncoder(vocab_size=100, num_layers=2)
 

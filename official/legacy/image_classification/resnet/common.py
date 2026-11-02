@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from __future__ import print_function
 import os
 
 from absl import flags
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 import tensorflow_model_optimization as tfmot
 from official.utils.flags import core as flags_core
@@ -35,7 +35,7 @@ LR_SCHEDULE = [  # (multiplier, epoch to start) tuples
 
 
 class PiecewiseConstantDecayWithWarmup(
-    tf.keras.optimizers.schedules.LearningRateSchedule):
+    tf_keras.optimizers.schedules.LearningRateSchedule):
   """Piecewise constant decay with warmup schedule."""
 
   def __init__(self,
@@ -81,17 +81,18 @@ class PiecewiseConstantDecayWithWarmup(
 
   def _get_learning_rate(self, step):
     """Compute learning rate at given step."""
+    step = tf.cast(step, dtype=tf.float32)
+    warmup_steps = tf.cast(self.warmup_steps, dtype=tf.float32)
     with tf.name_scope('PiecewiseConstantDecayWithWarmup'):
 
       def warmup_lr(step):
-        return self.rescaled_lr * (
-            tf.cast(step, tf.float32) / tf.cast(self.warmup_steps, tf.float32))
+        return self.rescaled_lr * (step / warmup_steps)
 
       def piecewise_lr(step):
         return tf.compat.v1.train.piecewise_constant(step, self.step_boundaries,
                                                      self.lr_values)
 
-      return tf.cond(step < self.warmup_steps, lambda: warmup_lr(step),
+      return tf.cond(step < warmup_steps, lambda: warmup_lr(step),
                      lambda: piecewise_lr(step))
 
   def get_config(self):
@@ -105,10 +106,14 @@ class PiecewiseConstantDecayWithWarmup(
     }
 
 
-def get_optimizer(learning_rate=0.1):
+def get_optimizer(learning_rate=0.1, use_legacy_optimizer=True):
   """Returns optimizer to use."""
   # The learning_rate is overwritten at the beginning of each step by callback.
-  return tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
+  if use_legacy_optimizer:
+    return tf_keras.optimizers.legacy.SGD(
+        learning_rate=learning_rate, momentum=0.9)
+  else:
+    return tf_keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
 
 
 def get_callbacks(pruning_method=None,
@@ -122,7 +127,7 @@ def get_callbacks(pruning_method=None,
   callbacks = [time_callback]
 
   if FLAGS.enable_tensorboard:
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+    tensorboard_callback = tf_keras.callbacks.TensorBoard(
         log_dir=FLAGS.model_dir, profile_batch=FLAGS.profile_steps)
     callbacks.append(tensorboard_callback)
 
@@ -138,7 +143,7 @@ def get_callbacks(pruning_method=None,
     if model_dir is not None:
       ckpt_full_path = os.path.join(model_dir, 'model.ckpt-{epoch:04d}')
       callbacks.append(
-          tf.keras.callbacks.ModelCheckpoint(
+          tf_keras.callbacks.ModelCheckpoint(
               ckpt_full_path, save_weights_only=True))
   return callbacks
 

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Layers package definition."""
-
+from official.projects.qat.vision.modeling.layers import nn_layers
 from official.projects.qat.vision.modeling.layers.nn_blocks import BottleneckBlockQuantized
 from official.projects.qat.vision.modeling.layers.nn_blocks import Conv2DBNBlockQuantized
 from official.projects.qat.vision.modeling.layers.nn_blocks import InvertedBottleneckBlockQuantized

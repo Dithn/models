@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for maskrcnn_model.py."""
-
-# Import libraries
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.deepmac_maskrcnn.modeling import maskrcnn_model
 from official.projects.deepmac_maskrcnn.modeling.heads import instance_heads as deep_instance_heads
@@ -51,7 +48,7 @@ def construct_model_and_anchors(image_size, use_gt_boxes_for_masks):
       image_size=image_size).multilevel_boxes
   num_anchors_per_location = len(aspect_ratios) * num_scales
 
-  input_specs = tf.keras.layers.InputSpec(shape=[None, None, None, 3])
+  input_specs = tf_keras.layers.InputSpec(shape=[None, None, None, 3])
   backbone = resnet.ResNet(model_id=50, input_specs=input_specs)
   decoder = fpn.FPN(
       min_level=min_level,
@@ -93,12 +90,14 @@ def construct_model_and_anchors(image_size, use_gt_boxes_for_masks):
 class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
-      (False, False,),
-      (False, True,),
-      (True, False,),
-      (True, True,),
+      (False, False, False),
+      (False, True, False),
+      (True, False, True),
+      (True, False, False),
+      (True, True, True),
+      (True, True, False),
   )
-  def test_forward(self, use_gt_boxes_for_masks, training):
+  def test_forward(self, use_gt_boxes_for_masks, training, use_outer_boxes):
     image_size = (256, 256)
     images = np.random.rand(2, image_size[0], image_size[1], 3)
     image_shape = np.array([[224, 100], [100, 224]])
@@ -106,6 +105,9 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
         image_size, use_gt_boxes_for_masks)
 
     gt_boxes = tf.zeros((2, 16, 4), dtype=tf.float32)
+    gt_outer_boxes = None
+    if use_outer_boxes:
+      gt_outer_boxes = tf.zeros((2, 16, 4), dtype=tf.float32)
     gt_masks = tf.zeros((2, 16, 32, 32))
     gt_classes = tf.zeros((2, 16), dtype=tf.int32)
     results = model(images.astype(np.uint8),
@@ -114,6 +116,7 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
                     gt_boxes,
                     gt_classes,
                     gt_masks,
+                    gt_outer_boxes,
                     training=training)
 
     self.assertIn('rpn_boxes', results)
@@ -138,12 +141,12 @@ class MaskRCNNModelTest(parameterized.TestCase, tf.test.TestCase):
   )
   def test_image_and_boxes(self, batch_size, num_boxes):
     image_size = (640, 640)
-    images = np.random.rand(1, image_size[0], image_size[1], 3).astype(
+    images = np.random.rand(batch_size, image_size[0], image_size[1], 3).astype(
         np.float32)
     model, _ = construct_model_and_anchors(
         image_size, use_gt_boxes_for_masks=True)
 
-    boxes = np.zeros((1, num_boxes, 4), dtype=np.float32)
+    boxes = np.zeros((batch_size, num_boxes, 4), dtype=np.float32)
     boxes[:, :, [2, 3]] = 1.0
     boxes = tf.constant(boxes)
     results = model.call_images_and_boxes(images, boxes)

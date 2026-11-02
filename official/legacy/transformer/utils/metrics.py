@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -471,7 +471,7 @@ def _lcs(x, y):
 def _f_lcs(llcs, m, n):
   """Computes the LCS-based F-measure score.
 
-  Source: http://research.microsoft.com/en-us/um/people/cyl/download/papers/
+  Source: https://research.microsoft.com/en-us/um/people/cyl/download/papers/
   rouge-working-note-v1.3.1.pdf
 
   Args:

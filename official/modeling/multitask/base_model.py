@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Abstraction of multi-task model."""
 from typing import Text, Dict
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class MultiTaskBaseModel(tf.Module):
@@ -25,11 +25,11 @@ class MultiTaskBaseModel(tf.Module):
     super().__init__(**kwargs)
     self._sub_tasks = self._instantiate_sub_tasks()
 
-  def _instantiate_sub_tasks(self) -> Dict[Text, tf.keras.Model]:
+  def _instantiate_sub_tasks(self) -> Dict[Text, tf_keras.Model]:
     """Abstract function that sets up the computation for each sub-task.
 
     Returns:
-      A map from task name (as string) to a tf.keras.Model object that
+      A map from task name (as string) to a tf_keras.Model object that
         represents the sub-task in the multi-task pool.
     """
     raise NotImplementedError(
@@ -37,9 +37,18 @@ class MultiTaskBaseModel(tf.Module):
 
   @property
   def sub_tasks(self):
-    """Fetch a map of task name (string) to task model (tf.keras.Model)."""
+    """Fetch a map of task name (string) to task model (tf_keras.Model)."""
     return self._sub_tasks
 
   def initialize(self):
     """Optional function that loads a pre-train checkpoint."""
     return
+
+  def build(self):
+    """Builds the networks for tasks to make sure variables are created."""
+    # Try to build all sub tasks.
+    for task_model in self._sub_tasks.values():
+      # Assumes all the tf.Module models are built because we don't have any
+      # way to check them.
+      if isinstance(task_model, tf_keras.Model) and not task_model.built:
+        _ = task_model(task_model.inputs)

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,12 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
-from tensorflow.python.keras import keras_parameterized  # pylint: disable=g-direct-tensorflow-import
 from official.nlp.modeling.layers import position_embedding
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
+class PositionEmbeddingLayerTest(tf.test.TestCase):
 
   def test_static_layer_output_shape(self):
     # Create a 3-dimensional input (the first dimension is implicit).
@@ -33,7 +29,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
     test_layer = position_embedding.PositionEmbedding(
         max_length=sequence_length)
     width = 30
-    input_tensor = tf.keras.Input(shape=(sequence_length, width))
+    input_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(input_tensor)
 
     # When using static positional embedding shapes, the output is expected
@@ -49,7 +45,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
     test_layer = position_embedding.PositionEmbedding(
         max_length=sequence_length, seq_axis=2)
     width = 30
-    input_tensor = tf.keras.Input(shape=(width, sequence_length, width))
+    input_tensor = tf_keras.Input(shape=(width, sequence_length, width))
     output_tensor = test_layer(input_tensor)
 
     # When using static positional embedding shapes, the output is expected
@@ -65,7 +61,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
     test_layer = position_embedding.PositionEmbedding(
         max_length=sequence_length, dtype="float16")
     width = 30
-    input_tensor = tf.keras.Input(shape=(sequence_length, width))
+    input_tensor = tf_keras.Input(shape=(sequence_length, width))
     output_tensor = test_layer(input_tensor)
 
     # When using static positional embedding shapes, the output is expected
@@ -81,7 +77,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
         max_length=max_sequence_length)
     # Create a 3-dimensional input (the first dimension is implicit).
     width = 30
-    input_tensor = tf.keras.Input(shape=(None, width))
+    input_tensor = tf_keras.Input(shape=(None, width))
     output_tensor = test_layer(input_tensor)
 
     # When using dynamic positional embedding shapes, the output is expected
@@ -96,7 +92,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
         max_length=max_sequence_length, seq_axis=2)
     # Create a 3-dimensional input (the first dimension is implicit).
     width = 30
-    input_tensor = tf.keras.Input(shape=(None, None, width))
+    input_tensor = tf_keras.Input(shape=(None, None, width))
     output_tensor = test_layer(input_tensor)
 
     # When using dynamic positional embedding shapes, the output is expected
@@ -111,10 +107,10 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
         max_length=max_sequence_length)
     # Create a 3-dimensional input (the first dimension is implicit).
     width = 30
-    input_tensor = tf.keras.Input(shape=(None, width))
+    input_tensor = tf_keras.Input(shape=(None, width))
     output_tensor = test_layer(input_tensor)
 
-    model = tf.keras.Model(input_tensor, output_tensor)
+    model = tf_keras.Model(input_tensor, output_tensor)
 
     # Create input data that is shorter than max_sequence_length, which should
     # trigger a down-slice.
@@ -129,10 +125,7 @@ class PositionEmbeddingLayerTest(keras_parameterized.TestCase):
     self.assertAllEqual([1, input_length, width], output_data.shape)
 
 
-# This decorator runs the test in V1, V2-Eager, and V2-Functional mode. It
-# guarantees forward compatibility of this code for the V2 switchover.
-@keras_parameterized.run_all_keras_modes
-class RelativePositionEmbeddingLayerTest(keras_parameterized.TestCase):
+class RelativePositionEmbeddingLayerTest(tf.test.TestCase):
 
   def test_relative_tensor_input(self):
     hidden_size = 8
@@ -164,8 +157,7 @@ class RelativePositionEmbeddingLayerTest(keras_parameterized.TestCase):
     self.assertAllEqual(output_tensor, expected_output_tensor)
 
 
-@keras_parameterized.run_all_keras_modes
-class RelativePositionBiasTest(keras_parameterized.TestCase):
+class RelativePositionBiasTest(tf.test.TestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(("bidirectional", True),
                                   ("unidirectional", False))

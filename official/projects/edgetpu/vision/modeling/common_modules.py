@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
 
 """Common modeling utilities."""
 from typing import Optional, Tuple
-# Import libraries
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 import tensorflow.compat.v1 as tf1
 
 from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
@@ -26,8 +25,8 @@ MEAN_RGB = (0.5 * 255, 0.5 * 255, 0.5 * 255)
 STDDEV_RGB = (0.5 * 255, 0.5 * 255, 0.5 * 255)
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
-class TpuBatchNormalization(tf.keras.layers.BatchNormalization):
+@tf_keras.utils.register_keras_serializable(package='Vision')
+class TpuBatchNormalization(tf_keras.layers.BatchNormalization):
   """Cross replica batch normalization."""
 
   def __init__(self, fused: Optional[bool] = False, **kwargs):
@@ -51,10 +50,14 @@ class TpuBatchNormalization(tf.keras.layers.BatchNormalization):
     return tf1.tpu.cross_replica_sum(t, group_assignment) / tf.cast(
         num_shards_per_group, t.dtype)
 
-  def _moments(self, inputs: tf.Tensor, reduction_axes: int, keep_dims: int):
+  def _moments(self,
+               inputs: tf.Tensor,
+               reduction_axes: int,
+               keep_dims: int,
+               mask: Optional[tf.Tensor] = None):
     """Compute the mean and variance: it overrides the original _moments."""
     shard_mean, shard_variance = super(TpuBatchNormalization, self)._moments(
-        inputs, reduction_axes, keep_dims=keep_dims)
+        inputs, reduction_axes, keep_dims=keep_dims, mask=mask)
 
     num_shards = tpu_function.get_tpu_context().number_of_shards or 1
     if num_shards <= 8:  # Skip cross_replica for 2x2 or smaller slices.
@@ -74,7 +77,7 @@ class TpuBatchNormalization(tf.keras.layers.BatchNormalization):
       return (shard_mean, shard_variance)
 
 
-def get_batch_norm(batch_norm_type: str) -> tf.keras.layers.BatchNormalization:
+def get_batch_norm(batch_norm_type: str) -> tf_keras.layers.BatchNormalization:
   """A helper to create a batch normalization getter.
 
   Args:
@@ -82,12 +85,12 @@ def get_batch_norm(batch_norm_type: str) -> tf.keras.layers.BatchNormalization:
      will use `TpuBatchNormalization`.
 
   Returns:
-    An instance of `tf.keras.layers.BatchNormalization`.
+    An instance of `tf_keras.layers.BatchNormalization`.
   """
   if batch_norm_type == 'tpu':
     return TpuBatchNormalization
 
-  return tf.keras.layers.BatchNormalization  # pytype: disable=bad-return-type  # typed-keras
+  return tf_keras.layers.BatchNormalization  # pytype: disable=bad-return-type  # typed-keras
 
 
 def count_params(model, trainable_only=True):
@@ -95,11 +98,11 @@ def count_params(model, trainable_only=True):
   if not trainable_only:
     return model.count_params()
   else:
-    return int(np.sum([tf.keras.backend.count_params(p)
+    return int(np.sum([tf_keras.backend.count_params(p)
                        for p in model.trainable_weights]))
 
 
-def load_weights(model: tf.keras.Model,
+def load_weights(model: tf_keras.Model,
                  model_weights_path: str,
                  checkpoint_format: str = 'tf_checkpoint'):
   """Load model weights from the given file path.

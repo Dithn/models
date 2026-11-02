@@ -1,4 +1,4 @@
-# Copyright 2022 The Orbit Authors. All Rights Reserved.
+# Copyright 2026 The Orbit Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,11 @@
 from absl import logging
 from orbit.utils import tpu_summaries
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
+
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.tpu import embedding_context_utils as ecu
+# pylint: enable=g-direct-tensorflow-import
 
 
 def create_loop_fn(step_fn):
@@ -116,7 +120,7 @@ def create_tf_while_loop_fn(step_fn):
     for _ in tf.range(num_steps):
       # Clear out the outer name scope so the ops created inside `tf.while_loop`
       # don't get "while/" as name prefix.
-      with tf.name_scope(""):
+      with tf.name_scope(""):  # pyrefly: ignore[bad-instantiation]
         step_fn(iterator)
 
   return loop_fn
@@ -179,7 +183,7 @@ def create_tf_while_loop_fn_with_state(step_fn):
     for _ in tf.range(num_steps):
       # Clear out the outer name scope so the ops created inside `tf.while_loop`
       # don't get "while/" as name prefix.
-      with tf.name_scope(""):
+      with tf.name_scope(""):  # pyrefly: ignore[bad-instantiation]
         # Relax the shapes within the loop, so the shape of `state` can change
         # across iterations. This is useful to aggregate outputs from each step
         # and concat to `state`.
@@ -200,8 +204,9 @@ class LoopFnWithSummaries(tpu_summaries.OptionalSummariesFunction):
 
   def __call__(self, iterator, num_steps):
     if tf.summary.should_record_summaries():
-      output = self.with_summaries(iterator, tf.constant(1))
+      with ecu.SequentialEmbeddingContext():
+        output = self.with_summaries(iterator, tf.constant(1))
       num_steps -= 1
     if num_steps >= 1:
       output = self.without_summaries(iterator, num_steps)
-    return output
+    return output  # pyrefly: ignore[unbound-name]

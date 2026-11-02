@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,9 @@
 # limitations under the License.
 
 """Training utils."""
-import copy
+
 import dataclasses
+import inspect
 import json
 import os
 import pprint
@@ -22,10 +23,12 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from absl import logging
 import gin
+import numpy as np
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.framework import ops
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2_as_graph
 # pylint: enable=g-direct-tensorflow-import
 from official.core import base_task
@@ -33,6 +36,9 @@ from official.core import base_trainer
 from official.core import config_definitions
 from official.core import exp_factory
 from official.modeling import hyperparams
+
+
+BEST_CHECKPOINT_NAME = 'best_ckpt'
 
 
 def get_leaf_nested_dict(d: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -79,6 +85,29 @@ def cast_leaf_nested_dict(d: Dict[str, Any],
     else:
       d[key] = cast_fn(value)
   return d
+
+
+def _filter_leaf_nested_dict(
+    d: Dict[str, Any], predicate: Callable[[Any], bool]
+) -> Dict[str, Any]:
+  """Filters the leaves of a dictionary with arbitrary depth in place.
+
+  Args:
+    d: The dictionary to extract value from.
+    predicate: A function that will be called on every leave item. When the
+      function returns True the leave will be kept. Otherwise the leave will be
+      dropped.
+
+  Returns:
+    A new dictionray with filtered result.
+  """
+  result = {}
+  for key, value in d.items():
+    if isinstance(value, dict):
+      result[key] = _filter_leaf_nested_dict(value, predicate)
+    elif predicate(value):
+      result[key] = value
+  return result
 
 
 def maybe_create_best_ckpt_exporter(params: config_definitions.ExperimentConfig,
@@ -137,7 +166,7 @@ class BestCheckpointExporter:
           checkpoint,
           directory=self._export_dir,
           max_to_keep=1,
-          checkpoint_name='best_ckpt')
+          checkpoint_name=BEST_CHECKPOINT_NAME)
 
     return self._checkpoint_manager
 
@@ -186,7 +215,11 @@ class BestCheckpointExporter:
 
   def export_best_eval_metric(self, eval_logs, global_step):
     """Export evaluation results of the best checkpoint into a json file."""
-    eval_logs_ext = copy.copy(eval_logs)
+    # eval_log_ext may contains non-scalar tensors, such as image data when
+    # `allow_image_summary` is True. Here we only keep scalar tensors.
+    eval_logs_ext = _filter_leaf_nested_dict(
+        eval_logs, lambda x: tf.rank(x) <= 1
+    )
     eval_logs_ext['best_ckpt_global_step'] = global_step
     eval_logs_ext = cast_leaf_nested_dict(
         eval_logs_ext, lambda x: float(orbit.utils.get_value(x)))
@@ -208,6 +241,28 @@ class BestCheckpointExporter:
     return tf.train.latest_checkpoint(self._export_dir)
 
 
+def create_optimizer(task: base_task.Task,
+                     params: config_definitions.ExperimentConfig
+                     ) -> tf_keras.optimizers.Optimizer:
+  """A create optimizer util to be backward compatability with new args."""
+  if 'dp_config' in inspect.signature(task.create_optimizer).parameters:
+    dp_config = None
+    if hasattr(params.task, 'differential_privacy_config'):
+      dp_config = params.task.differential_privacy_config
+    optimizer = task.create_optimizer(
+        params.trainer.optimizer_config, params.runtime,
+        dp_config=dp_config)
+  else:
+    if hasattr(params.task, 'differential_privacy_config'
+              ) and params.task.differential_privacy_config is not None:
+      raise ValueError('Differential privacy config is specified but '
+                       'task.create_optimizer api does not accept it.')
+    optimizer = task.create_optimizer(
+        params.trainer.optimizer_config,
+        params.runtime)
+  return optimizer
+
+
 @gin.configurable
 def create_trainer(params: config_definitions.ExperimentConfig,
                    task: base_task.Task,
@@ -218,8 +273,7 @@ def create_trainer(params: config_definitions.ExperimentConfig,
   """Create trainer."""
   logging.info('Running default trainer.')
   model = task.build_model()
-  optimizer = task.create_optimizer(params.trainer.optimizer_config,
-                                    params.runtime)
+  optimizer = create_optimizer(task, params)
   return trainer_cls(
       params,
       task,
@@ -238,6 +292,7 @@ class ParseConfigOptions:
   tpu: str = ''
   tf_data_service: str = ''
   params_override: str = ''
+  strict_override: bool = True
 
   def __contains__(self, name):
     return name in dataclasses.asdict(self)
@@ -276,9 +331,13 @@ class ExperimentParser:
 
   def parse_config_file(self, params):
     """Override the configs of params from the config_file."""
+    is_strict = True
+    if isinstance(self._flags_obj, ParseConfigOptions):
+      is_strict = self._flags_obj.strict_override
     for config_file in self._flags_obj.config_file or []:
       params = hyperparams.override_params_dict(
-          params, config_file, is_strict=True)
+          params, config_file, is_strict=is_strict
+      )
     return params
 
   def parse_runtime(self, params):
@@ -309,14 +368,28 @@ class ExperimentParser:
     return params
 
   def parse_params_override(self, params):
+    """Overrides params from the --params_override flag.
+
+    Args:
+      params: A ParamsDict object to be overridden.
+
+    Returns:
+      The overridden ParamsDict object.
+    """
     # Get the second level of override from `--params_override`.
     # `--params_override` is typically used as a further override over the
     # template. For example, one may define a particular template for training
     # ResNet50 on ImageNet in a config file and pass it via `--config_file`,
     # then define different learning rates and pass it via `--params_override`.
     if self._flags_obj.params_override:
+      is_strict = True
+      if isinstance(self._flags_obj, ParseConfigOptions):
+        is_strict = self._flags_obj.strict_override
       params = hyperparams.override_params_dict(
-          params, self._flags_obj.params_override, is_strict=True)
+          params,
+          self._flags_obj.params_override,
+          is_strict=is_strict,
+      )
     return params
 
 
@@ -417,7 +490,7 @@ def remove_ckpts(model_dir):
     tf.io.gfile.remove(file_to_remove)
 
 
-def write_model_params(model: Union[tf.Module, tf.keras.Model],
+def write_model_params(model: Union[tf.Module, tf_keras.Model],
                        output_path: str) -> None:
   """Writes the model parameters and shapes to a file.
 
@@ -435,7 +508,7 @@ def write_model_params(model: Union[tf.Module, tf.keras.Model],
 
 
 def try_count_params(
-    model: Union[tf.Module, tf.keras.Model],
+    model: Union[tf.Module, tf_keras.Model],
     trainable_only: bool = False):
   """Count the number of parameters if model is possible.
 
@@ -465,7 +538,7 @@ def try_count_params(
   return total_params
 
 
-def try_count_flops(model: Union[tf.Module, tf.keras.Model],
+def try_count_flops(model: Union[tf.Module, tf_keras.Model],
                     inputs_kwargs: Optional[Dict[str, Any]] = None,
                     output_path: Optional[str] = None):
   """Counts and returns model FLOPs.
@@ -513,3 +586,44 @@ def try_count_flops(model: Union[tf.Module, tf.keras.Model],
           'reached before this run.', e)
       return None
   return None
+
+
+@ops.RegisterStatistics('Einsum', 'flops')
+def _einsum_flops(graph, node):
+  """Calculates the compute resources needed for Einsum."""
+  assert len(node.input) == 2
+  x_shape = tf.compat.v1.graph_util.tensor_shape_from_node_def_name(
+      graph, node.input[0])
+  y_shape = tf.compat.v1.graph_util.tensor_shape_from_node_def_name(
+      graph, node.input[1])
+  x_shape.assert_is_fully_defined()
+  y_shape.assert_is_fully_defined()
+  x_shape = x_shape.as_list()
+  y_shape = y_shape.as_list()
+  equation = str(node.attr['equation'])
+  equation = (
+      equation.replace('s:', '')
+      .replace('"', '')
+      .replace(' ', '')
+      .replace('\n', '')
+  )
+  x_str = equation.split(',')[0]
+  y_r_str = equation.split(',')[1]
+  y_str = y_r_str.split('->')[0]
+  r_str = y_r_str.split('->')[1]
+  shape_dic = {}
+  contracted = set()
+  for indice in x_str + y_str:
+    if indice in x_str:
+      indice_dim = x_shape[x_str.find(indice)]
+    elif indice in y_str:
+      indice_dim = y_shape[y_str.find(indice)]
+    else:
+      raise ValueError('indice {} not found in inputs'.format(indice))
+    shape_dic[indice] = indice_dim
+    if indice not in r_str:
+      contracted.add(indice)
+  madds = np.prod([shape_dic[indice] for indice in r_str]) * (
+      np.prod([shape_dic[indice] for indice in contracted]))
+  flops = 2 * madds
+  return ops.OpStats('flops', flops)

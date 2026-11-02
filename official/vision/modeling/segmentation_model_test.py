@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for segmentation network."""
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.modeling import backbones
 from official.vision.modeling import segmentation_model
@@ -40,7 +39,7 @@ class SegmentationNetworkTest(parameterized.TestCase, tf.test.TestCase):
     """Test for creation of a segmentation network."""
     num_classes = 10
     inputs = np.random.rand(2, input_size, input_size, 3)
-    tf.keras.backend.set_image_data_format('channels_last')
+    tf_keras.backend.set_image_data_format('channels_last')
     backbone = backbones.ResNet(model_id=50)
 
     decoder = fpn.FPN(

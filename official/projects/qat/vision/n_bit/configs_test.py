@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
 
 """Tests for configs.py."""
 
-# Import libraries
-
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 import tensorflow_model_optimization as tfmot
 
+from official.modeling import tf_utils
 from official.projects.qat.vision.n_bit import configs
 
 
@@ -68,7 +67,7 @@ class _TestHelper(object):
 class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def _simple_dense_layer(self):
-    layer = tf.keras.layers.Dense(2)
+    layer = tf_keras.layers.Dense(2)
     layer.build(input_shape=(3,))
     return layer
 
@@ -100,7 +99,7 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(
+    quantize_kernel = tf_keras.backend.variable(
         np.ones(layer.kernel.shape.as_list()))
     num_bits_weight = 4
     num_bits_activation = 4
@@ -113,7 +112,7 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeActivations(self):
     layer = self._simple_dense_layer()
-    quantize_activation = tf.keras.activations.relu
+    quantize_activation = tf_keras.activations.relu
     num_bits_weight = 4
     num_bits_activation = 4
 
@@ -125,7 +124,7 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights_ErrorOnWrongNumberOfWeights(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(
+    quantize_kernel = tf_keras.backend.variable(
         np.ones(layer.kernel.shape.as_list()))
     num_bits_weight = 4
     num_bits_activation = 4
@@ -142,7 +141,7 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeWeights_ErrorOnWrongShapeOfWeight(self):
     layer = self._simple_dense_layer()
-    quantize_kernel = tf.keras.backend.variable(np.ones([1, 2]))
+    quantize_kernel = tf_keras.backend.variable(np.ones([1, 2]))
     num_bits_weight = 4
     num_bits_activation = 4
 
@@ -154,7 +153,7 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
 
   def testSetsQuantizeActivations_ErrorOnWrongNumberOfActivations(self):
     layer = self._simple_dense_layer()
-    quantize_activation = tf.keras.activations.relu
+    quantize_activation = tf_keras.activations.relu
     num_bits_weight = 4
     num_bits_activation = 4
 
@@ -207,15 +206,19 @@ class DefaultNBitQuantizeConfigTest(tf.test.TestCase, _TestHelper):
             'num_bits_activation': 4
         }
     }
-    serialized_quantize_config = tf.keras.utils.serialize_keras_object(
-        quantize_config)
+    serialized_quantize_config = tf_utils.serialize_keras_object(
+        quantize_config
+    )
 
     self.assertEqual(expected_config, serialized_quantize_config)
 
-    quantize_config_from_config = tf.keras.utils.deserialize_keras_object(
-        serialized_quantize_config,
-        module_objects=globals(),
-        custom_objects=configs._types_dict())
+    quantize_config_from_config = (
+        tf_utils.deserialize_keras_object(
+            serialized_quantize_config,
+            module_objects=globals(),
+            custom_objects=configs._types_dict(),
+        )
+    )
 
     self.assertEqual(quantize_config, quantize_config_from_config)
 

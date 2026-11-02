@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 from typing import List, Mapping, Optional, Union
 
-# Import libraries
-
 from absl import logging
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.modeling import maskrcnn_model
+from official.vision.ops import box_ops
 
 
 def resize_as(source, size):
@@ -35,19 +34,19 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
   """The Mask R-CNN model."""
 
   def __init__(self,
-               backbone: tf.keras.Model,
-               decoder: tf.keras.Model,
-               rpn_head: tf.keras.layers.Layer,
-               detection_head: Union[tf.keras.layers.Layer,
-                                     List[tf.keras.layers.Layer]],
-               roi_generator: tf.keras.layers.Layer,
-               roi_sampler: Union[tf.keras.layers.Layer,
-                                  List[tf.keras.layers.Layer]],
-               roi_aligner: tf.keras.layers.Layer,
-               detection_generator: tf.keras.layers.Layer,
-               mask_head: Optional[tf.keras.layers.Layer] = None,
-               mask_sampler: Optional[tf.keras.layers.Layer] = None,
-               mask_roi_aligner: Optional[tf.keras.layers.Layer] = None,
+               backbone: tf_keras.Model,
+               decoder: tf_keras.Model,
+               rpn_head: tf_keras.layers.Layer,
+               detection_head: Union[tf_keras.layers.Layer,
+                                     List[tf_keras.layers.Layer]],
+               roi_generator: tf_keras.layers.Layer,
+               roi_sampler: Union[tf_keras.layers.Layer,
+                                  List[tf_keras.layers.Layer]],
+               roi_aligner: tf_keras.layers.Layer,
+               detection_generator: tf_keras.layers.Layer,
+               mask_head: Optional[tf_keras.layers.Layer] = None,
+               mask_sampler: Optional[tf_keras.layers.Layer] = None,
+               mask_roi_aligner: Optional[tf_keras.layers.Layer] = None,
                class_agnostic_bbox_pred: bool = False,
                cascade_class_ensemble: bool = False,
                min_level: Optional[int] = None,
@@ -55,13 +54,14 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
                num_scales: Optional[int] = None,
                aspect_ratios: Optional[List[float]] = None,
                anchor_size: Optional[float] = None,
+               outer_boxes_scale: float = 1.0,
                use_gt_boxes_for_masks=False,
                **kwargs):
     """Initializes the Mask R-CNN model.
 
     Args:
-      backbone: `tf.keras.Model`, the backbone network.
-      decoder: `tf.keras.Model`, the decoder network.
+      backbone: `tf_keras.Model`, the backbone network.
+      decoder: `tf_keras.Model`, the decoder network.
       rpn_head: the RPN head.
       detection_head: the detection head or a list of heads.
       roi_generator: the ROI generator.
@@ -86,11 +86,13 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
         aspect_ratios=[1.0, 2.0, 0.5] adds three anchors on each scale level.
       anchor_size: A number representing the scale of size of the base anchor to
         the feature stride 2^level.
+      outer_boxes_scale: a float to scale up the bounding boxes to generate
+        more inclusive masks. The scale is expected to be >=1.0.
       use_gt_boxes_for_masks: bool, if set, crop using groundtruth boxes instead
         of proposals for training mask head
       **kwargs: keyword arguments to be passed.
     """
-    super(DeepMaskRCNNModel, self).__init__(
+    super().__init__(
         backbone=backbone,
         decoder=decoder,
         rpn_head=rpn_head,
@@ -109,6 +111,7 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
         num_scales=num_scales,
         aspect_ratios=aspect_ratios,
         anchor_size=anchor_size,
+        outer_boxes_scale=outer_boxes_scale,
         **kwargs)
 
     self._config_dict['use_gt_boxes_for_masks'] = use_gt_boxes_for_masks
@@ -120,24 +123,44 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
            gt_boxes: Optional[tf.Tensor] = None,
            gt_classes: Optional[tf.Tensor] = None,
            gt_masks: Optional[tf.Tensor] = None,
+           gt_outer_boxes: Optional[tf.Tensor] = None,
            training: Optional[bool] = None) -> Mapping[str, tf.Tensor]:
-
+    call_box_outputs_kwargs = {
+        'images': images,
+        'image_shape': image_shape,
+        'anchor_boxes': anchor_boxes,
+        'gt_boxes': gt_boxes,
+        'gt_classes': gt_classes,
+        'training': training
+    }
+    if self.outer_boxes_scale > 1.0:
+      call_box_outputs_kwargs['gt_outer_boxes'] = gt_outer_boxes
     model_outputs, intermediate_outputs = self._call_box_outputs(
-        images=images, image_shape=image_shape, anchor_boxes=anchor_boxes,
-        gt_boxes=gt_boxes, gt_classes=gt_classes, training=training)
+        **call_box_outputs_kwargs)
     if not self._include_mask:
       return model_outputs
+
+    if self.outer_boxes_scale == 1.0:
+      current_rois = intermediate_outputs['current_rois']
+      matched_gt_boxes = intermediate_outputs['matched_gt_boxes']
+      mask_head_gt_boxes = gt_boxes
+    else:
+      current_rois = box_ops.compute_outer_boxes(
+          intermediate_outputs['current_rois'],
+          tf.expand_dims(image_shape, axis=1), self.outer_boxes_scale)
+      matched_gt_boxes = intermediate_outputs['matched_gt_outer_boxes']
+      mask_head_gt_boxes = gt_outer_boxes
 
     model_mask_outputs = self._call_mask_outputs(
         model_box_outputs=model_outputs,
         features=model_outputs['decoder_features'],
-        current_rois=intermediate_outputs['current_rois'],
+        current_rois=current_rois,
         matched_gt_indices=intermediate_outputs['matched_gt_indices'],
-        matched_gt_boxes=intermediate_outputs['matched_gt_boxes'],
+        matched_gt_boxes=matched_gt_boxes,
         matched_gt_classes=intermediate_outputs['matched_gt_classes'],
-        gt_masks=gt_masks,
-        gt_classes=gt_classes,
-        gt_boxes=gt_boxes,
+        gt_masks=gt_masks,  # pyrefly: ignore[bad-argument-type]
+        gt_classes=gt_classes,  # pyrefly: ignore[bad-argument-type]
+        gt_boxes=mask_head_gt_boxes,  # pyrefly: ignore[bad-argument-type]
         training=training)
     model_outputs.update(model_mask_outputs)
     return model_outputs
@@ -194,7 +217,10 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
         })
 
     else:
-      rois = model_outputs['detection_boxes']
+      if self.outer_boxes_scale == 1.0:
+        rois = model_outputs['detection_boxes']
+      else:
+        rois = model_outputs['detection_outer_boxes']
       roi_classes = model_outputs['detection_classes']
 
     # Mask RoI align.
@@ -204,8 +230,8 @@ class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
       mask_head_classes = gt_classes
 
     else:
-      roi_aligner_boxes = rois
-      mask_head_classes = roi_classes
+      roi_aligner_boxes = rois  # pyrefly: ignore[unbound-name]
+      mask_head_classes = roi_classes  # pyrefly: ignore[unbound-name]
 
     mask_logits, mask_probs = self._features_to_mask_outputs(
         features, roi_aligner_boxes, mask_head_classes)

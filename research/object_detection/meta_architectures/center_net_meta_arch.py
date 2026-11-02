@@ -1392,21 +1392,31 @@ def refine_keypoints(regressed_keypoints,
     # Shape [batch_size, num_instances, max_candidates, num_keypoints].
     tiled_keypoint_scores = tf.tile(
         tf.expand_dims(keypoint_scores, axis=1),
-        multiples=[1, num_instances, 1, 1])
+        multiples=[1, num_instances, 1, 1],
+    )
     ranking_scores = tiled_keypoint_scores / (distances + score_distance_offset)
-    nearby_candidate_inds = tf.math.argmax(ranking_scores, axis=2)
+    nearby_candidate_inds = tf.math.argmax(
+        ranking_scores, axis=2, output_type=tf.int32
+    )
   elif candidate_ranking_mode == 'score_scaled_distance_ratio':
     ranking_scores = sdr_scaled_ranking_score(
-        keypoint_scores, distances, bboxes, score_distance_multiplier)
-    nearby_candidate_inds = tf.math.argmax(ranking_scores, axis=2)
+        keypoint_scores, distances, bboxes, score_distance_multiplier
+    )
+    nearby_candidate_inds = tf.math.argmax(
+        ranking_scores, axis=2, output_type=tf.int32
+    )
   elif candidate_ranking_mode == 'gaussian_weighted':
     ranking_scores = gaussian_weighted_score(
-        keypoint_scores, distances, keypoint_std_dev, bboxes)
-    nearby_candidate_inds = tf.math.argmax(ranking_scores, axis=2)
+        keypoint_scores, distances, keypoint_std_dev, bboxes
+    )
+    nearby_candidate_inds = tf.math.argmax(
+        ranking_scores, axis=2, output_type=tf.int32
+    )
     weighted_scores = tf.math.reduce_max(ranking_scores, axis=2)
   else:
-    raise ValueError('Not recognized candidate_ranking_mode: %s' %
-                     candidate_ranking_mode)
+    raise ValueError(
+        'Not recognized candidate_ranking_mode: %s' % candidate_ranking_mode
+    )
 
   # Gather the coordinates and scores corresponding to the closest candidates.
   # Shape of tensors are [batch_size, num_instances, num_keypoints, 2] and
@@ -1600,14 +1610,12 @@ def _gather_candidates_at_indices(keypoint_candidates,
   combined_indices = tf.stack([
       _multi_range(
           batch_size,
-          value_repetitions=num_keypoints * num_indices,
-          dtype=tf.int64),
+          value_repetitions=num_keypoints * num_indices),
       _multi_range(
           num_keypoints,
           value_repetitions=num_indices,
-          range_repetitions=batch_size,
-          dtype=tf.int64),
-      tf.reshape(nearby_candidate_inds_transposed, [-1])
+          range_repetitions=batch_size),
+      tf.reshape(tf.cast(nearby_candidate_inds_transposed, tf.int32), [-1])
   ], axis=1)
 
   nearby_candidate_coords_transposed = tf.gather_nd(
@@ -2376,7 +2384,7 @@ class KeypointEstimationParams(
         offset_head_num_filters, offset_head_kernel_sizes,
         regress_head_num_filters, regress_head_kernel_sizes,
         score_distance_multiplier, std_dev_multiplier, rescoring_threshold,
-        argmax_postprocessing, gaussian_denom_ratio)
+        gaussian_denom_ratio, argmax_postprocessing)
 
 
 class ObjectCenterParams(
@@ -2676,7 +2684,8 @@ class CenterNetMetaArch(model.DetectionModel):
                use_depthwise=False,
                compute_heatmap_sparse=False,
                non_max_suppression_fn=None,
-               unit_height_conv=False):
+               unit_height_conv=False,
+               output_prediction_dict=False):
     """Initializes a CenterNet model.
 
     Args:
@@ -2722,6 +2731,8 @@ class CenterNetMetaArch(model.DetectionModel):
       non_max_suppression_fn: Optional Non Max Suppression function to apply.
       unit_height_conv: If True, Conv2Ds in prediction heads have asymmetric
         kernels with height=1.
+      output_prediction_dict: If true, combines all items from the dictionary
+        returned by predict() function into the output of postprocess().
     """
     assert object_detection_params or keypoint_params_dict
     # Shorten the name for convenience and better formatting.
@@ -2747,6 +2758,7 @@ class CenterNetMetaArch(model.DetectionModel):
 
     self._use_depthwise = use_depthwise
     self._compute_heatmap_sparse = compute_heatmap_sparse
+    self._output_prediction_dict = output_prediction_dict
 
     # subclasses may not implement the unit_height_conv arg, so only provide it
     # as a kwarg if it is True.
@@ -3065,8 +3077,7 @@ class CenterNetMetaArch(model.DetectionModel):
           width=input_width,
           gt_classes_list=gt_classes_list,
           gt_keypoints_list=gt_keypoints_list,
-          gt_weights_list=gt_weights_list,
-          maximum_normalized_coordinate=maximum_normalized_coordinate)
+          gt_weights_list=gt_weights_list)
     else:
       gt_boxes_list = self.groundtruth_lists(fields.BoxListFields.boxes)
       heatmap_targets = assigner.assign_center_targets_from_boxes(
@@ -4110,6 +4121,10 @@ class CenterNetMetaArch(model.DetectionModel):
         fields.DetectionResultFields.num_detections: num_detections,
     }
 
+    if self._output_prediction_dict:
+      postprocess_dict.update(prediction_dict)
+      postprocess_dict['true_image_shapes'] = true_image_shapes
+
     boxes_strided = None
     if self._od_params:
       boxes_strided = (
@@ -4122,7 +4137,7 @@ class CenterNetMetaArch(model.DetectionModel):
 
       postprocess_dict.update({
           fields.DetectionResultFields.detection_boxes: boxes,
-          'detection_boxes_strided': boxes_strided
+          'detection_boxes_strided': boxes_strided,
       })
 
     if self._kp_params_dict:
@@ -4227,6 +4242,15 @@ class CenterNetMetaArch(model.DetectionModel):
           axis=-2)
       multiclass_scores = postprocess_dict[
           fields.DetectionResultFields.detection_multiclass_scores]
+      num_classes = tf.shape(multiclass_scores)[2]
+      class_mask = tf.cast(
+          tf.one_hot(
+              postprocess_dict[fields.DetectionResultFields.detection_classes],
+              depth=num_classes), tf.bool)
+      # Surpress the scores of those unselected classes to be zeros. Otherwise,
+      # the downstream NMS ops might be confused and introduce issues.
+      multiclass_scores = tf.where(
+          class_mask, multiclass_scores, tf.zeros_like(multiclass_scores))
       num_valid_boxes = postprocess_dict.pop(
           fields.DetectionResultFields.num_detections)
       # Remove scores and classes as NMS will compute these form multiclass

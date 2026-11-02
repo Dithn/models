@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """TFDS detection decoders."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.vision.dataloaders import decoder
 
 
@@ -25,7 +25,7 @@ class MSCOCODecoder(decoder.Decoder):
     """Decode the serialized example.
 
     Args:
-      serialized_example: a dictonary example produced by tfds.
+      serialized_example: a dictionary example produced by tfds.
 
     Returns:
       decoded_tensors: a dictionary of tensors with the following fields:
@@ -56,5 +56,6 @@ class MSCOCODecoder(decoder.Decoder):
 TFDS_ID_TO_DECODER_MAP = {
     'coco/2017': MSCOCODecoder,
     'coco/2014': MSCOCODecoder,
-    'coco': MSCOCODecoder
+    'coco': MSCOCODecoder,
+    'scenic:objects365': MSCOCODecoder,
 }

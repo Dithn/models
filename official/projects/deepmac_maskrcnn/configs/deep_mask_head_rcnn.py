@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,14 +35,16 @@ class DeepMaskHead(maskrcnn_config.MaskHead):
 
 @dataclasses.dataclass
 class DeepMaskHeadRCNN(maskrcnn_config.MaskRCNN):
-  mask_head: Optional[DeepMaskHead] = DeepMaskHead()
+  mask_head: Optional[DeepMaskHead] = dataclasses.field(
+      default_factory=DeepMaskHead
+  )
   use_gt_boxes_for_masks: bool = False
 
 
 @dataclasses.dataclass
 class DeepMaskHeadRCNNTask(maskrcnn_config.MaskRCNNTask):
   """Configuration for the deep mask head R-CNN task."""
-  model: DeepMaskHeadRCNN = DeepMaskHeadRCNN()
+  model: DeepMaskHeadRCNN = dataclasses.field(default_factory=DeepMaskHeadRCNN)
 
 
 @exp_factory.register_config_factory('deep_mask_head_rcnn_resnetfpn_coco')
@@ -56,25 +58,25 @@ def deep_mask_head_rcnn_resnetfpn_coco() -> cfg.ExperimentConfig:
   config = cfg.ExperimentConfig(
       runtime=cfg.RuntimeConfig(mixed_precision_dtype='bfloat16'),
       task=DeepMaskHeadRCNNTask(
-          init_checkpoint='gs://cloud-tpu-checkpoints/vision-2.0/resnet50_imagenet/ckpt-28080',
-          init_checkpoint_modules='backbone',
-          annotation_file=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
+          init_checkpoint='gs://cloud-tpu-checkpoints/vision-2.0/resnet50_imagenet/ckpt-28080',  # pyrefly: ignore[unexpected-keyword]
+          init_checkpoint_modules='backbone',  # pyrefly: ignore[unexpected-keyword]
+          annotation_file=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,  # pyrefly: ignore[unexpected-keyword]
                                        'instances_val2017.json'),
           model=DeepMaskHeadRCNN(
-              num_classes=91, input_size=[1024, 1024, 3], include_mask=True),  # pytype: disable=wrong-keyword-args
-          losses=maskrcnn_config.Losses(l2_weight_decay=0.00004),
-          train_data=maskrcnn_config.DataConfig(
+              num_classes=91, input_size=[1024, 1024, 3], include_mask=True),  # pyrefly: ignore[unexpected-keyword]
+          losses=maskrcnn_config.Losses(l2_weight_decay=0.00004),  # pyrefly: ignore[unexpected-keyword]
+          train_data=maskrcnn_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
                                       'train*'),
               is_training=True,
               global_batch_size=global_batch_size,
               parser=maskrcnn_config.Parser(
                   aug_rand_hflip=True, aug_scale_min=0.8, aug_scale_max=1.25)),
-          validation_data=maskrcnn_config.DataConfig(
+          validation_data=maskrcnn_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
                                       'val*'),
               is_training=False,
-              global_batch_size=8)),  # pytype: disable=wrong-keyword-args
+              global_batch_size=8)),
       trainer=cfg.TrainerConfig(
           train_steps=22500,
           validation_steps=coco_val_samples // 8,
@@ -123,39 +125,39 @@ def deep_mask_head_rcnn_spinenet_coco() -> cfg.ExperimentConfig:
   config = cfg.ExperimentConfig(
       runtime=cfg.RuntimeConfig(mixed_precision_dtype='bfloat16'),
       task=DeepMaskHeadRCNNTask(
-          annotation_file=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
-                                       'instances_val2017.json'),  # pytype: disable=wrong-keyword-args
+          annotation_file=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,  # pyrefly: ignore[unexpected-keyword]
+                                       'instances_val2017.json'),
           model=DeepMaskHeadRCNN(
-              backbone=backbones.Backbone(
+              backbone=backbones.Backbone(  # pyrefly: ignore[unexpected-keyword]
                   type='spinenet',
                   spinenet=backbones.SpineNet(
                       model_id='49',
                       min_level=3,
                       max_level=7,
                   )),
-              decoder=decoders.Decoder(
+              decoder=decoders.Decoder(  # pyrefly: ignore[unexpected-keyword]
                   type='identity', identity=decoders.Identity()),
-              anchor=maskrcnn_config.Anchor(anchor_size=3),
-              norm_activation=common.NormActivation(use_sync_bn=True),
-              num_classes=91,
-              input_size=[640, 640, 3],
-              min_level=3,
-              max_level=7,
-              include_mask=True),   # pytype: disable=wrong-keyword-args
-          losses=maskrcnn_config.Losses(l2_weight_decay=0.00004),
-          train_data=maskrcnn_config.DataConfig(
+              anchor=maskrcnn_config.Anchor(anchor_size=3),  # pyrefly: ignore[unexpected-keyword]
+              norm_activation=common.NormActivation(use_sync_bn=True),  # pyrefly: ignore[unexpected-keyword]
+              num_classes=91,  # pyrefly: ignore[unexpected-keyword]
+              input_size=[640, 640, 3],  # pyrefly: ignore[unexpected-keyword]
+              min_level=3,  # pyrefly: ignore[unexpected-keyword]
+              max_level=7,  # pyrefly: ignore[unexpected-keyword]
+              include_mask=True),  # pyrefly: ignore[unexpected-keyword]
+          losses=maskrcnn_config.Losses(l2_weight_decay=0.00004),  # pyrefly: ignore[unexpected-keyword]
+          train_data=maskrcnn_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
                                       'train*'),
               is_training=True,
               global_batch_size=train_batch_size,
               parser=maskrcnn_config.Parser(
                   aug_rand_hflip=True, aug_scale_min=0.5, aug_scale_max=2.0)),
-          validation_data=maskrcnn_config.DataConfig(
+          validation_data=maskrcnn_config.DataConfig(  # pyrefly: ignore[unexpected-keyword]
               input_path=os.path.join(maskrcnn_config.COCO_INPUT_PATH_BASE,
                                       'val*'),
               is_training=False,
               global_batch_size=eval_batch_size,
-              drop_remainder=False)),   # pytype: disable=wrong-keyword-args
+              drop_remainder=False)),
       trainer=cfg.TrainerConfig(
           train_steps=steps_per_epoch * 350,
           validation_steps=coco_val_samples // eval_batch_size,

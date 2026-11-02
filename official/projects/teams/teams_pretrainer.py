@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 """Trainer network for TEAMS models."""
 # pylint: disable=g-classes-have-attributes
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import tf_utils
 from official.nlp.modeling import layers
@@ -24,7 +24,7 @@ from official.nlp.modeling import models
 _LOGIT_PENALTY_MULTIPLIER = 10000
 
 
-class ReplacedTokenDetectionHead(tf.keras.layers.Layer):
+class ReplacedTokenDetectionHead(tf_keras.layers.Layer):
   """Replaced token detection discriminator head.
 
   Arguments:
@@ -58,15 +58,16 @@ class ReplacedTokenDetectionHead(tf.keras.layers.Layer):
               intermediate_activation=self.activation,
               dropout_rate=self.hidden_cfg['dropout_rate'],
               attention_dropout_rate=self.hidden_cfg['attention_dropout_rate'],
-              kernel_initializer=self.initializer,
+              kernel_initializer=tf_utils.clone_initializer(self.initializer),
               name='transformer/layer_%d_rtd' % i))
-    self.dense = tf.keras.layers.Dense(
+    self.dense = tf_keras.layers.Dense(
         self.hidden_size,
         activation=self.activation,
-        kernel_initializer=self.initializer,
+        kernel_initializer=tf_utils.clone_initializer(self.initializer),
         name='transform/rtd_dense')
-    self.rtd_head = tf.keras.layers.Dense(
-        units=1, kernel_initializer=self.initializer,
+    self.rtd_head = tf_keras.layers.Dense(
+        units=1,
+        kernel_initializer=tf_utils.clone_initializer(self.initializer),
         name='transform/rtd_head')
 
     if output not in ('predictions', 'logits'):
@@ -94,7 +95,7 @@ class ReplacedTokenDetectionHead(tf.keras.layers.Layer):
     return tf.squeeze(rtd_logits, axis=-1)
 
 
-class MultiWordSelectionHead(tf.keras.layers.Layer):
+class MultiWordSelectionHead(tf_keras.layers.Layer):
   """Multi-word selection discriminator head.
 
   Arguments:
@@ -116,15 +117,15 @@ class MultiWordSelectionHead(tf.keras.layers.Layer):
     super(MultiWordSelectionHead, self).__init__(name=name, **kwargs)
     self.embedding_table = embedding_table
     self.activation = activation
-    self.initializer = tf.keras.initializers.get(initializer)
+    self.initializer = tf_keras.initializers.get(initializer)
 
     self._vocab_size, self.embed_size = self.embedding_table.shape
-    self.dense = tf.keras.layers.Dense(
+    self.dense = tf_keras.layers.Dense(
         self.embed_size,
         activation=self.activation,
         kernel_initializer=self.initializer,
         name='transform/mws_dense')
-    self.layer_norm = tf.keras.layers.LayerNormalization(
+    self.layer_norm = tf_keras.layers.LayerNormalization(
         axis=-1, epsilon=1e-12, name='transform/mws_layernorm')
 
     if output not in ('predictions', 'logits'):
@@ -201,8 +202,8 @@ class MultiWordSelectionHead(tf.keras.layers.Layer):
     return output_tensor
 
 
-@tf.keras.utils.register_keras_serializable(package='Text')
-class TeamsPretrainer(tf.keras.Model):
+@tf_keras.utils.register_keras_serializable(package='Text')
+class TeamsPretrainer(tf_keras.Model):
   """TEAMS network training model.
 
   This is an implementation of the network structure described in "Training
@@ -298,7 +299,7 @@ class TeamsPretrainer(tf.keras.Model):
         output=output_type,
         name='discriminator_mws')
 
-  def call(self, inputs):
+  def call(self, inputs):  # pyrefly: ignore[bad-override]
     """TEAMS forward pass.
 
     Args:
